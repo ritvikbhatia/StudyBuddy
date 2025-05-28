@@ -1,20 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Youtube as YoutubeIcon, MessageSquare, CheckCircle, XCircle, Send, ChevronLeft, ChevronRight, Lightbulb, Bot, User as UserIcon, Play, Pause, Volume2, Maximize } from 'lucide-react';
+import { Youtube as YoutubeIcon, MessageSquare, Send, ChevronLeft, ChevronRight, Lightbulb, Bot, User as UserIcon, Play, Pause, Volume2, Maximize, Menu } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
+import { InteractivePanel, LeaderboardEntry } from './InteractivePanel'; // Import new component
+import { faker } from '@faker-js/faker';
 
 const YOUTUBE_VIDEO_ID = 'sqdwl8nfUXA';
 
-interface TranscriptSegment {
+export interface TranscriptSegment { // Export for InteractivePanel
   id: number;
   startTime: number; // in seconds
   text: string;
 }
 
-const mockTranscript: TranscriptSegment[] = [
+export const mockTranscript: TranscriptSegment[] = [ // Export for InteractivePanel
   { id: 1, startTime: 0, text: "Welcome to today's live class on Advanced React Patterns!" },
   { id: 2, startTime: 5, text: "We'll be covering hooks, context API, and performance optimization." },
   { id: 3, startTime: 10, text: "First, let's dive into custom hooks. They allow you to extract component logic into reusable functions." },
@@ -28,21 +30,24 @@ const mockTranscript: TranscriptSegment[] = [
   { id: 11, startTime: 80, text: "Then, you use a Provider component to make the context value available to all descendants." },
   { id: 12, startTime: 90, text: "And finally, consumer components can subscribe to this context using `useContext` hook or a Consumer component." },
   { id: 13, startTime: 100, text: "Remember, while Context is powerful, it can make component reuse more difficult, so use it judiciously." },
+  { id: 14, startTime: 110, text: "Moving on to performance optimization, memoization is key. React.memo and useMemo are your friends." },
+  { id: 15, startTime: 120, text: "Virtualization for long lists can also significantly improve rendering performance." },
+  { id: 16, startTime: 130, text: "Code splitting helps reduce initial load time by only loading the JavaScript needed for the current view." },
+  { id: 17, startTime: 140, text: "Always profile your application using React DevTools to identify bottlenecks." },
+  { id: 18, startTime: 150, text: "That concludes our main topics for today. We'll now open the floor for Q&A." },
 ];
 
-interface MCQ {
+export interface MCQ { // Export for InteractivePanel
   id: number;
-  startTime: number; // in seconds
   question: string;
   options: string[];
   correctAnswerIndex: number;
   explanation: string;
 }
 
-const mockMCQs: MCQ[] = [
+export const liveClassMockMcqs: MCQ[] = [ // Export for InteractivePanel
   {
     id: 1,
-    startTime: 30,
     question: "What is the primary purpose of custom hooks in React?",
     options: ["To replace Redux", "To extract component logic into reusable functions", "To style components", "To handle routing"],
     correctAnswerIndex: 1,
@@ -50,13 +55,27 @@ const mockMCQs: MCQ[] = [
   },
   {
     id: 2,
-    startTime: 75,
     question: "Which React feature is used to pass data through the component tree without manual prop drilling?",
     options: ["State", "Props", "Context API", "Refs"],
     correctAnswerIndex: 2,
     explanation: "The Context API is designed to share data that can be considered “global” for a tree of React components."
   },
+  {
+    id: 3,
+    question: "What does `React.memo` help with?",
+    options: ["State management", "Memoizing functional components to prevent re-renders", "Fetching data", "Creating context"],
+    correctAnswerIndex: 1,
+    explanation: "`React.memo` is a higher-order component that memoizes your component, skipping re-renders if props haven't changed."
+  },
+  {
+    id: 4,
+    question: "What is code splitting in React?",
+    options: ["Splitting CSS into multiple files", "Splitting JavaScript bundles to load parts on demand", "Splitting components into smaller ones", "A way to manage state"],
+    correctAnswerIndex: 1,
+    explanation: "Code splitting helps reduce initial load time by loading only the JavaScript needed for the current view, improving performance."
+  },
 ];
+
 
 interface ChatMessage {
   id: string;
@@ -67,75 +86,74 @@ interface ChatMessage {
 
 export const LiveClassesPage: React.FC = () => {
   const { user } = useAuth();
-  const [currentTimeInSeconds, setCurrentTimeInSeconds] = useState(0);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false); // Simulated
-  const [currentTranscriptSegment, setCurrentTranscriptSegment] = useState<TranscriptSegment | null>(mockTranscript[0]);
-  const [showMCQModal, setShowMCQModal] = useState(false);
-  const [activeMCQ, setActiveMCQ] = useState<MCQ | null>(null);
-  const [selectedMCQAnswer, setSelectedMCQAnswer] = useState<number | null>(null);
-  const [mcqFeedback, setMcqFeedback] = useState<{ correct: boolean; explanation: string } | null>(null);
+  const [currentTimeInSeconds, setCurrentTimeInSeconds] = useState(0); // Simulated video time
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false); 
+  
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
 
-  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+  // States for InteractivePanel
+  const [currentLiveMCQ, setCurrentLiveMCQ] = useState<MCQ | null>(liveClassMockMcqs[0]);
+  const [liveMCQTimer, setLiveMCQTimer] = useState(60);
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [newQuestionIndicator, setNewQuestionIndicator] = useState(false);
+  const [userQuizScore, setUserQuizScore] = useState(0); // User's score in the live quiz
+
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
+  const videoPlayerRef = useRef<HTMLDivElement>(null); // Ref for video player height
 
-  // Simulate video playback and sync features
+  // Generate initial leaderboard data
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+    const mockLeaderboard: LeaderboardEntry[] = Array.from({ length: 10 }).map((_, i) => ({
+      id: faker.string.uuid(),
+      name: faker.person.firstName() + " " + faker.person.lastName().charAt(0) + ".",
+      avatar: faker.image.avatarGitHub(),
+      score: faker.number.int({ min: 50, max: 500 }),
+      correctAnswers: faker.number.int({ min: 5, max: 20 }),
+      avgTime: parseFloat(faker.number.float({ min: 5, max: 25, precision: 0.1 }).toFixed(1)),
+    })).sort((a, b) => b.score - a.score);
+    setLeaderboardData(mockLeaderboard);
+  }, []);
+
+  // Simulate video playback and sync features for InteractivePanel
+  useEffect(() => {
+    let videoTimerId: NodeJS.Timeout;
+    let mcqIntervalId: NodeJS.Timeout;
+
     if (isVideoPlaying) {
-      intervalId = setInterval(() => {
-        setCurrentTimeInSeconds(prevTime => {
-          const newTime = prevTime + 1;
+      // Video time simulation
+      videoTimerId = setInterval(() => {
+        setCurrentTimeInSeconds(prevTime => prevTime + 1);
+      }, 1000);
 
-          // Update transcript
-          const nextTranscriptSegment = mockTranscript.find(
-            segment => newTime >= segment.startTime && (mockTranscript.findIndex(s => s.id === segment.id) === mockTranscript.length - 1 || newTime < mockTranscript[mockTranscript.findIndex(s => s.id === segment.id) + 1].startTime)
-          );
-          if (nextTranscriptSegment && nextTranscriptSegment.id !== currentTranscriptSegment?.id) {
-            setCurrentTranscriptSegment(nextTranscriptSegment);
+      // MCQ rotation and timer
+      mcqIntervalId = setInterval(() => {
+        setLiveMCQTimer(prev => {
+          if (prev === 1) { // Time for new question
+            const currentIndex = liveClassMockMcqs.findIndex(mcq => mcq.id === currentLiveMCQ?.id);
+            const nextIndex = (currentIndex + 1) % liveClassMockMcqs.length;
+            setCurrentLiveMCQ(liveClassMockMcqs[nextIndex]);
+            setNewQuestionIndicator(true); // Trigger notification
+            setTimeout(() => setNewQuestionIndicator(false), 3000); // Hide after 3s
+            return 60; // Reset timer
           }
-
-          // Trigger MCQ
-          const mcqToShow = mockMCQs.find(mcq => mcq.startTime === newTime);
-          if (mcqToShow && !activeMCQ) { // Show only if not already showing an MCQ
-            setActiveMCQ(mcqToShow);
-            setShowMCQModal(true);
-            setSelectedMCQAnswer(null);
-            setMcqFeedback(null);
-          }
-          return newTime;
+          return prev - 1;
         });
       }, 1000);
     }
-    return () => clearInterval(intervalId);
-  }, [isVideoPlaying, currentTranscriptSegment?.id, activeMCQ]);
-
-  useEffect(() => {
-    if (transcriptContainerRef.current && currentTranscriptSegment) {
-      const activeElement = transcriptContainerRef.current.querySelector(`[data-segment-id="${currentTranscriptSegment.id}"]`);
-      if (activeElement) {
-        activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }, [currentTranscriptSegment]);
+    return () => {
+      clearInterval(videoTimerId);
+      clearInterval(mcqIntervalId);
+    };
+  }, [isVideoPlaying, currentLiveMCQ]);
   
   useEffect(() => {
     if (chatMessagesContainerRef.current) {
       chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
     }
   }, [chatMessages]);
-
-
-  const handleMCQAnswer = (selectedIndex: number) => {
-    if (!activeMCQ) return;
-    setSelectedMCQAnswer(selectedIndex);
-    const correct = selectedIndex === activeMCQ.correctAnswerIndex;
-    setMcqFeedback({ correct, explanation: activeMCQ.explanation });
-    toast(correct ? 'Correct Answer!' : 'Incorrect Answer.', { icon: correct ? '✅' : '❌' });
-  };
 
   const handleChatSend = async () => {
     if (!chatInput.trim() || !user) {
@@ -148,7 +166,6 @@ export const LiveClassesPage: React.FC = () => {
     setChatInput('');
     setIsAiTyping(true);
 
-    // Simulate AI response
     await new Promise(resolve => setTimeout(resolve, 1500));
     const aiResponseText = `AI response to: "${currentInput}". For this live class on Advanced React Patterns, this concept is crucial because...`;
     const newAiMessage: ChatMessage = { id: (Date.now() + 1).toString(), type: 'ai', text: aiResponseText, timestamp: new Date() };
@@ -158,6 +175,48 @@ export const LiveClassesPage: React.FC = () => {
 
   const togglePlayPause = () => setIsVideoPlaying(!isVideoPlaying);
 
+  const handleQuizAnswerSubmit = (isCorrect: boolean) => {
+    if (isCorrect) {
+      const points = 10; // Example points
+      setUserQuizScore(prev => prev + points);
+      toast.success(`Correct! +${points} points`);
+
+      // Update user on leaderboard (or add if not present)
+      setLeaderboardData(prevLeaderboard => {
+        const userEntryIndex = prevLeaderboard.findIndex(entry => entry.name === (user?.name || "You"));
+        let updatedLeaderboard;
+        if (userEntryIndex > -1) {
+          updatedLeaderboard = [...prevLeaderboard];
+          updatedLeaderboard[userEntryIndex] = {
+            ...updatedLeaderboard[userEntryIndex],
+            score: updatedLeaderboard[userEntryIndex].score + points,
+            correctAnswers: updatedLeaderboard[userEntryIndex].correctAnswers + 1,
+          };
+        } else {
+          updatedLeaderboard = [...prevLeaderboard, {
+            id: user?.id || faker.string.uuid(),
+            name: user?.name || "You",
+            avatar: user?.avatar || faker.image.avatarGitHub(),
+            score: points,
+            correctAnswers: 1,
+            avgTime: 30, // Mock avg time
+          }];
+        }
+        return updatedLeaderboard.sort((a, b) => b.score - a.score);
+      });
+    } else {
+      toast.error("Incorrect. Try the next one!");
+    }
+    // Move to next question or show some feedback
+    const currentIndex = liveClassMockMcqs.findIndex(mcq => mcq.id === currentLiveMCQ?.id);
+    const nextIndex = (currentIndex + 1) % liveClassMockMcqs.length;
+    setCurrentLiveMCQ(liveClassMockMcqs[nextIndex]);
+    setLiveMCQTimer(60); // Reset timer
+    setNewQuestionIndicator(true);
+    setTimeout(() => setNewQuestionIndicator(false), 3000);
+  };
+
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -166,71 +225,72 @@ export const LiveClassesPage: React.FC = () => {
       </motion.div>
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-        {/* Main Content: Video + Transcription */}
-        <div className="lg:flex-[2] space-y-6">
-          <Card className="p-2 sm:p-4">
+        {/* Main Content Area: Video + Interactive Panel */}
+        <div className="lg:flex-[2] space-y-6 flex flex-col"> {/* Make this flex column */}
+          <Card className="p-2 sm:p-4" ref={videoPlayerRef}>
             <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-2xl">
               <iframe
                 className="w-full h-full"
-                src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=0&modestbranding=1&rel=0`}
+                src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=0&modestbranding=1&rel=0&controls=1`} // Enable controls
                 title="YouTube video player"
                 frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               ></iframe>
             </div>
-            {/* Simulated Player Controls - Basic */}
+            {/* Simulated Player Controls - Basic (can be removed if YouTube controls are sufficient) */}
             <div className="mt-4 flex items-center justify-between p-2 bg-gray-50 rounded-md">
                 <div className="flex items-center gap-2">
                     <Button onClick={togglePlayPause} variant="ghost" size="sm" className="p-2">
                         {isVideoPlaying ? <Pause size={20} /> : <Play size={20} />}
                     </Button>
                     <div className="text-sm text-gray-600">
-                        Time: {Math.floor(currentTimeInSeconds / 60)}:{(currentTimeInSeconds % 60).toString().padStart(2, '0')}
+                        Simulated Time: {Math.floor(currentTimeInSeconds / 60)}:{(currentTimeInSeconds % 60).toString().padStart(2, '0')}
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                {/* <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" className="p-2"><Volume2 size={20} /></Button>
                     <Button variant="ghost" size="sm" className="p-2"><Maximize size={20} /></Button>
-                </div>
+                </div> */}
             </div>
           </Card>
 
-          <Card className="p-4 sm:p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              <MessageSquare size={24} className="mr-2 text-blue-600" /> Live Transcription
-            </h2>
-            <div ref={transcriptContainerRef} className="h-64 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg border">
-              {mockTranscript.map(segment => (
-                <motion.p
-                  key={segment.id}
-                  data-segment-id={segment.id}
-                  initial={{ opacity: 0.6 }}
-                  animate={{ opacity: currentTranscriptSegment?.id === segment.id ? 1 : 0.6, scale: currentTranscriptSegment?.id === segment.id ? 1.02 : 1 }}
-                  className={`text-sm transition-all duration-300 p-2 rounded ${
-                    currentTranscriptSegment?.id === segment.id ? 'text-gray-900 font-medium bg-blue-50' : 'text-gray-600'
-                  }`}
-                >
-                  <span className="font-semibold text-blue-600 mr-1.5">[{Math.floor(segment.startTime/60)}:{(segment.startTime%60).toString().padStart(2,'0')}]</span>
-                  {segment.text}
-                </motion.p>
-              ))}
-            </div>
-          </Card>
+          {/* Interactive Panel (Transcription, Quiz, Leaderboard) */}
+          <div className="flex-grow"> {/* Allow this panel to take remaining vertical space */}
+            <InteractivePanel
+              currentSimulatedTime={currentTimeInSeconds}
+              currentMCQ={currentLiveMCQ}
+              mcqTimer={liveMCQTimer}
+              leaderboardData={leaderboardData}
+              newQuestionIndicator={newQuestionIndicator}
+              onQuizAnswerSubmit={handleQuizAnswerSubmit}
+            />
+          </div>
         </div>
 
-        {/* AI Chatbot - Collapsible on smaller screens, fixed on larger */}
-        <div className={`lg:flex-[1] transition-all duration-300 ease-in-out ${isChatOpen ? 'fixed inset-0 bg-black bg-opacity-50 z-40 lg:static lg:bg-transparent lg:z-auto' : 'hidden lg:block'}`} onClick={() => { if (window.innerWidth < 1024) setIsChatOpen(false);}}>
+        {/* AI Chatbot Panel */}
+        <div className={`lg:flex-[1] transition-all duration-300 ease-in-out 
+                       ${isChatOpen 
+                         ? 'fixed inset-0 bg-black bg-opacity-50 z-40 lg:static lg:bg-transparent lg:z-auto' 
+                         : 'hidden lg:block'}`} 
+             onClick={() => { if (window.innerWidth < 1024) setIsChatOpen(false);}}>
           <motion.div 
-            className={`h-full w-full max-w-md ml-auto lg:max-w-none bg-white shadow-xl lg:shadow-none lg:rounded-none flex flex-col ${isChatOpen ? 'rounded-l-xl' : 'rounded-xl'}`}
+            className={`h-full w-full max-w-md ml-auto lg:max-w-none bg-white shadow-xl lg:shadow-none lg:rounded-none flex flex-col 
+                       ${isChatOpen ? 'rounded-l-xl' : 'lg:rounded-xl'}`}
             initial={window.innerWidth < 1024 ? { x: "100%" } : { opacity: 0 }}
             animate={window.innerWidth < 1024 ? { x: isChatOpen ? "0%" : "100%" } : { opacity: 1 }}
             exit={window.innerWidth < 1024 ? { x: "100%" } : { opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
+            style={{ 
+              height: videoPlayerRef.current && window.innerWidth >=1024 
+                ? `${videoPlayerRef.current.offsetHeight + (document.querySelector('.interactive-panel-actual-height')?.clientHeight || 400)}px` // Match video + interactive panel height on desktop
+                : 'calc(100vh - 4rem)', // Default for mobile or if ref not ready
+              maxHeight: 'calc(100vh - 4rem)' // Ensure it doesn't overflow viewport
+            }}
           >
-            <Card className="p-0 flex flex-col h-[calc(100vh-8rem)] lg:h-auto lg:max-h-[calc(48rem)]"> {/* Adjusted height */}
-              <div className="p-4 border-b flex items-center justify-between">
+            <Card className="p-0 flex flex-col h-full"> {/* Ensure card fills the motion.div */}
+              <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
                 <h2 className="text-lg font-semibold text-gray-800 flex items-center">
                   <Bot size={20} className="mr-2 text-blue-600" /> AI Doubt Solver
                 </h2>
@@ -264,7 +324,7 @@ export const LiveClassesPage: React.FC = () => {
                     </div>
                 )}
               </div>
-              <div className="p-4 border-t">
+              <div className="p-4 border-t sticky bottom-0 bg-white z-10">
                 <div className="flex space-x-2">
                   <input
                     type="text"
@@ -289,67 +349,13 @@ export const LiveClassesPage: React.FC = () => {
           <Button
             variant="primary"
             onClick={() => setIsChatOpen(true)}
-            className="fixed bottom-6 right-6 z-30 lg:hidden rounded-full p-3 shadow-lg"
+            className="fixed bottom-6 right-6 z-30 lg:hidden rounded-full p-3 shadow-lg flex items-center justify-center"
             aria-label="Open AI Chat"
           >
             <Bot size={24} />
           </Button>
         )}
       </div>
-
-      {/* MCQ Modal */}
-      <AnimatePresence>
-        {showMCQModal && activeMCQ && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"
-            onClick={() => { /* setShowMCQModal(false); setActiveMCQ(null); */ }} // Prevent closing on overlay click until answered
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center text-blue-600 mb-4">
-                <Lightbulb size={24} className="mr-2"/>
-                <h3 className="text-xl font-bold">Quick Question!</h3>
-              </div>
-              <p className="text-gray-700 mb-1">Video Time: {Math.floor(activeMCQ.startTime / 60)}:{(activeMCQ.startTime % 60).toString().padStart(2, '0')}</p>
-              <p className="text-gray-800 font-medium mb-5">{activeMCQ.question}</p>
-              <div className="space-y-3 mb-5">
-                {activeMCQ.options.map((option, index) => (
-                  <Button
-                    key={index}
-                    variant={selectedMCQAnswer === index ? (mcqFeedback?.correct ? 'primary' : 'secondary') : 'outline'}
-                    size="md"
-                    className={`w-full justify-start text-left h-auto py-2.5 ${selectedMCQAnswer === index && mcqFeedback?.correct ? 'bg-green-500 hover:bg-green-600 border-green-500' : ''} ${selectedMCQAnswer === index && mcqFeedback && !mcqFeedback.correct ? 'bg-red-500 hover:bg-red-600 border-red-500' : ''}`}
-                    onClick={() => !mcqFeedback && handleMCQAnswer(index)}
-                    disabled={!!mcqFeedback}
-                  >
-                    {mcqFeedback && selectedMCQAnswer === index && (mcqFeedback.correct ? <CheckCircle size={18} className="mr-2"/> : <XCircle size={18} className="mr-2"/>)}
-                    {option}
-                  </Button>
-                ))}
-              </div>
-              {mcqFeedback && (
-                <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className={`p-3 rounded-lg text-sm ${mcqFeedback.correct ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                  <p className="font-semibold">{mcqFeedback.correct ? 'Correct!' : 'Incorrect.'}</p>
-                  <p>{mcqFeedback.explanation}</p>
-                </motion.div>
-              )}
-              {mcqFeedback && (
-                <Button onClick={() => { setShowMCQModal(false); setActiveMCQ(null); setMcqFeedback(null); setSelectedMCQAnswer(null); }} className="w-full mt-5">
-                  Continue Class
-                </Button>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

@@ -15,12 +15,12 @@ export const useTranslation = () => {
     try {
       // Correctly access the imported JSON module
       const langModule = await import(`../locales/${lang}.json`);
-      setTranslations(langModule); // Use the module directly, not langModule.default
+      setTranslations(langModule.default); // Use the module directly, not langModule.default
     } catch (error) {
       console.warn(`Could not load translations for language: ${lang}. Falling back to English.`);
       try {
         const fallbackModule = await import(`../locales/en.json`);
-        setTranslations(fallbackModule); // Use the module directly for fallback
+        setTranslations(fallbackModule.default); // Use the module directly for fallback
       } catch (fallbackError) {
         console.error('Could not load fallback English translations.', fallbackError);
         setTranslations({}); 
@@ -39,27 +39,19 @@ export const useTranslation = () => {
       return key; 
     }
 
-    const keys = key.split('.');
-    let current: string | Translations | undefined = translations;
+     const translatedString = translations[key] as string;
 
-    for (const k of keys) {
-      if (typeof current === 'object' && current !== null && k in current) {
-        current = current[k];
-      } else {
-        current = undefined; 
-        break;
+    if (translatedString) {
+      if (replacements) {
+        return Object.keys(replacements).reduce((acc, placeholder) => {
+          return acc.replace(new RegExp(`{{${placeholder}}}`, 'g'), String(replacements[placeholder]));
+        }, translatedString);
+
       }
+      return translatedString;
     }
     
-    let translatedString = typeof current === 'string' ? current : key; 
-
-    if (replacements) {
-      Object.keys(replacements).forEach(placeholder => {
-        translatedString = translatedString.replace(new RegExp(`{{${placeholder}}}`, 'g'), String(replacements[placeholder]));
-      });
-    }
-
-    return translatedString;
+   return key;
   }, [translations, loading]);
 
   return { t, loadingTranslations: loading, currentLanguage: preferredLanguage };
