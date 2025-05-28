@@ -1,22 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Youtube as YoutubeIcon, MessageSquare, Send, ChevronLeft, ChevronRight, Lightbulb, Bot, User as UserIcon, Play, Pause, Volume2, Maximize, Menu } from 'lucide-react';
+import { Youtube as YoutubeIcon, MessageSquare, Send, ChevronLeft, ChevronRight, Lightbulb, Bot, User as UserIcon, Play, Pause, Volume2, Maximize, Menu, PlayCircle as PlayCircleIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { InteractivePanel, LeaderboardEntry } from './InteractivePanel'; // Import new component
+import { InteractivePanel, LeaderboardEntry } from './InteractivePanel';
 import { faker } from '@faker-js/faker';
+import { contentService, PwVideo } from '../../services/contentService'; // Import PwVideo and contentService
 
 const YOUTUBE_VIDEO_ID = 'sqdwl8nfUXA';
 
-export interface TranscriptSegment { // Export for InteractivePanel
+export interface TranscriptSegment {
   id: number;
-  startTime: number; // in seconds
+  startTime: number; 
   text: string;
 }
 
-export const mockTranscript: TranscriptSegment[] = [ // Export for InteractivePanel
+export const mockTranscript: TranscriptSegment[] = [
   { id: 1, startTime: 0, text: "Welcome to today's live class on Advanced React Patterns!" },
   { id: 2, startTime: 5, text: "We'll be covering hooks, context API, and performance optimization." },
   { id: 3, startTime: 10, text: "First, let's dive into custom hooks. They allow you to extract component logic into reusable functions." },
@@ -37,7 +38,7 @@ export const mockTranscript: TranscriptSegment[] = [ // Export for InteractivePa
   { id: 18, startTime: 150, text: "That concludes our main topics for today. We'll now open the floor for Q&A." },
 ];
 
-export interface MCQ { // Export for InteractivePanel
+export interface MCQ {
   id: number;
   question: string;
   options: string[];
@@ -45,7 +46,7 @@ export interface MCQ { // Export for InteractivePanel
   explanation: string;
 }
 
-export const liveClassMockMcqs: MCQ[] = [ // Export for InteractivePanel
+export const liveClassMockMcqs: MCQ[] = [
   {
     id: 1,
     question: "What is the primary purpose of custom hooks in React?",
@@ -86,7 +87,7 @@ interface ChatMessage {
 
 export const LiveClassesPage: React.FC = () => {
   const { user } = useAuth();
-  const [currentTimeInSeconds, setCurrentTimeInSeconds] = useState(0); // Simulated video time
+  const [currentTimeInSeconds, setCurrentTimeInSeconds] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false); 
   
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -94,17 +95,17 @@ export const LiveClassesPage: React.FC = () => {
   const [chatInput, setChatInput] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
 
-  // States for InteractivePanel
   const [currentLiveMCQ, setCurrentLiveMCQ] = useState<MCQ | null>(liveClassMockMcqs[0]);
   const [liveMCQTimer, setLiveMCQTimer] = useState(60);
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [newQuestionIndicator, setNewQuestionIndicator] = useState(false);
-  const [userQuizScore, setUserQuizScore] = useState(0); // User's score in the live quiz
+  const [userQuizScore, setUserQuizScore] = useState(0);
+
+  const [recommendedVideos, setRecommendedVideos] = useState<PwVideo[]>([]); // New state for recommended videos
 
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
-  const videoPlayerRef = useRef<HTMLDivElement>(null); // Ref for video player height
+  const videoPlayerRef = useRef<HTMLDivElement>(null);
 
-  // Generate initial leaderboard data
   useEffect(() => {
     const mockLeaderboard: LeaderboardEntry[] = Array.from({ length: 10 }).map((_, i) => ({
       id: faker.string.uuid(),
@@ -115,29 +116,29 @@ export const LiveClassesPage: React.FC = () => {
       avgTime: parseFloat(faker.number.float({ min: 5, max: 25, precision: 0.1 }).toFixed(1)),
     })).sort((a, b) => b.score - a.score);
     setLeaderboardData(mockLeaderboard);
+
+    // Fetch recommended videos
+    setRecommendedVideos(contentService.getAllPwVideos().slice(0, 3)); // Get first 3 for example
   }, []);
 
-  // Simulate video playback and sync features for InteractivePanel
   useEffect(() => {
     let videoTimerId: NodeJS.Timeout;
     let mcqIntervalId: NodeJS.Timeout;
 
     if (isVideoPlaying) {
-      // Video time simulation
       videoTimerId = setInterval(() => {
         setCurrentTimeInSeconds(prevTime => prevTime + 1);
       }, 1000);
 
-      // MCQ rotation and timer
       mcqIntervalId = setInterval(() => {
         setLiveMCQTimer(prev => {
-          if (prev === 1) { // Time for new question
+          if (prev === 1) {
             const currentIndex = liveClassMockMcqs.findIndex(mcq => mcq.id === currentLiveMCQ?.id);
             const nextIndex = (currentIndex + 1) % liveClassMockMcqs.length;
             setCurrentLiveMCQ(liveClassMockMcqs[nextIndex]);
-            setNewQuestionIndicator(true); // Trigger notification
-            setTimeout(() => setNewQuestionIndicator(false), 3000); // Hide after 3s
-            return 60; // Reset timer
+            setNewQuestionIndicator(true);
+            setTimeout(() => setNewQuestionIndicator(false), 3000);
+            return 60;
           }
           return prev - 1;
         });
@@ -177,11 +178,10 @@ export const LiveClassesPage: React.FC = () => {
 
   const handleQuizAnswerSubmit = (isCorrect: boolean) => {
     if (isCorrect) {
-      const points = 10; // Example points
+      const points = 10;
       setUserQuizScore(prev => prev + points);
       toast.success(`Correct! +${points} points`);
 
-      // Update user on leaderboard (or add if not present)
       setLeaderboardData(prevLeaderboard => {
         const userEntryIndex = prevLeaderboard.findIndex(entry => entry.name === (user?.name || "You"));
         let updatedLeaderboard;
@@ -199,7 +199,7 @@ export const LiveClassesPage: React.FC = () => {
             avatar: user?.avatar || faker.image.avatarGitHub(),
             score: points,
             correctAnswers: 1,
-            avgTime: 30, // Mock avg time
+            avgTime: 30,
           }];
         }
         return updatedLeaderboard.sort((a, b) => b.score - a.score);
@@ -207,15 +207,19 @@ export const LiveClassesPage: React.FC = () => {
     } else {
       toast.error("Incorrect. Try the next one!");
     }
-    // Move to next question or show some feedback
     const currentIndex = liveClassMockMcqs.findIndex(mcq => mcq.id === currentLiveMCQ?.id);
     const nextIndex = (currentIndex + 1) % liveClassMockMcqs.length;
     setCurrentLiveMCQ(liveClassMockMcqs[nextIndex]);
-    setLiveMCQTimer(60); // Reset timer
+    setLiveMCQTimer(60);
     setNewQuestionIndicator(true);
     setTimeout(() => setNewQuestionIndicator(false), 3000);
   };
 
+  const handleRecommendedVideoClick = (video: PwVideo) => {
+    toast.success(`Navigating to study: ${video.title}`);
+    // Here you would typically call onTabChange or a similar navigation function
+    // For example: onTabChange('study', { inputType: 'youtube', content: video.youtubeUrl, topic: video.title });
+  };
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -225,20 +229,18 @@ export const LiveClassesPage: React.FC = () => {
       </motion.div>
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-        {/* Main Content Area: Video + Interactive Panel */}
-        <div className="lg:flex-[2] space-y-6 flex flex-col"> {/* Make this flex column */}
+        <div className="lg:flex-[2] space-y-6 flex flex-col">
           <Card className="p-2 sm:p-4" ref={videoPlayerRef}>
             <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-2xl">
               <iframe
                 className="w-full h-full"
-                src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=0&modestbranding=1&rel=0&controls=1`} // Enable controls
+                src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=0&modestbranding=1&rel=0&controls=1`}
                 title="YouTube video player"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               ></iframe>
             </div>
-            {/* Simulated Player Controls - Basic (can be removed if YouTube controls are sufficient) */}
             <div className="mt-4 flex items-center justify-between p-2 bg-gray-50 rounded-md">
                 <div className="flex items-center gap-2">
                     <Button onClick={togglePlayPause} variant="ghost" size="sm" className="p-2">
@@ -248,15 +250,10 @@ export const LiveClassesPage: React.FC = () => {
                         Simulated Time: {Math.floor(currentTimeInSeconds / 60)}:{(currentTimeInSeconds % 60).toString().padStart(2, '0')}
                     </div>
                 </div>
-                {/* <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" className="p-2"><Volume2 size={20} /></Button>
-                    <Button variant="ghost" size="sm" className="p-2"><Maximize size={20} /></Button>
-                </div> */}
             </div>
           </Card>
 
-          {/* Interactive Panel (Transcription, Quiz, Leaderboard) */}
-          <div className="flex-grow"> {/* Allow this panel to take remaining vertical space */}
+          <div className="flex-grow">
             <InteractivePanel
               currentSimulatedTime={currentTimeInSeconds}
               currentMCQ={currentLiveMCQ}
@@ -268,83 +265,114 @@ export const LiveClassesPage: React.FC = () => {
           </div>
         </div>
 
-        {/* AI Chatbot Panel */}
         <div className={`lg:flex-[1] transition-all duration-300 ease-in-out 
                        ${isChatOpen 
                          ? 'fixed inset-0 bg-black bg-opacity-50 z-40 lg:static lg:bg-transparent lg:z-auto' 
                          : 'hidden lg:block'}`} 
              onClick={() => { if (window.innerWidth < 1024) setIsChatOpen(false);}}>
           <motion.div 
-            className={`h-full w-full max-w-md ml-auto lg:max-w-none bg-white shadow-xl lg:shadow-none lg:rounded-none flex flex-col 
+            className={`h-full w-full max-w-md ml-auto lg:max-w-none bg-white shadow-xl lg:shadow-none lg:rounded-none flex flex-col overflow-y-auto space-y-6
                        ${isChatOpen ? 'rounded-l-xl' : 'lg:rounded-xl'}`}
             initial={window.innerWidth < 1024 ? { x: "100%" } : { opacity: 0 }}
             animate={window.innerWidth < 1024 ? { x: isChatOpen ? "0%" : "100%" } : { opacity: 1 }}
             exit={window.innerWidth < 1024 ? { x: "100%" } : { opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
-            style={{ 
-              height: videoPlayerRef.current && window.innerWidth >=1024 
-                ? `${videoPlayerRef.current.offsetHeight + (document.querySelector('.interactive-panel-actual-height')?.clientHeight || 400)}px` // Match video + interactive panel height on desktop
-                : 'calc(100vh - 4rem)', // Default for mobile or if ref not ready
-              maxHeight: 'calc(100vh - 4rem)' // Ensure it doesn't overflow viewport
-            }}
           >
-            <Card className="p-0 flex flex-col h-full"> {/* Ensure card fills the motion.div */}
-              <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-                <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                  <Bot size={20} className="mr-2 text-blue-600" /> AI Doubt Solver
-                </h2>
-                <Button variant="ghost" size="sm" onClick={() => setIsChatOpen(false)} className="lg:hidden p-1">
-                  <ChevronRight size={20} />
-                </Button>
-              </div>
-              <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                {chatMessages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] px-3 py-2 rounded-lg shadow-sm text-sm ${msg.type === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border'}`}>
-                      <div className="flex items-start space-x-1.5">
-                        {msg.type === 'ai' && <Bot size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />}
-                        <p>{msg.text}</p>
-                        {msg.type === 'user' && <UserIcon size={14} className="text-blue-200 mt-0.5 flex-shrink-0" />}
-                      </div>
-                      <p className={`text-xs mt-1 ${msg.type === 'user' ? 'text-blue-200 text-right' : 'text-gray-500'}`}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                    </div>
-                  </div>
-                ))}
-                {isAiTyping && (
-                    <div className="flex justify-start">
-                        <div className="bg-white text-gray-800 border px-3 py-2 rounded-lg shadow-sm">
-                            <div className="flex items-center space-x-1.5">
-                                <Bot size={14} className="text-blue-500" />
-                                <div className="flex space-x-1">
-                                    {[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: `${i*0.1}s`}}></div>)}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-              </div>
-              <div className="p-4 border-t sticky bottom-0 bg-white z-10">
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
-                    placeholder={user ? "Ask a question..." : "Login to chat"}
-                    className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                    disabled={!user}
-                  />
-                  <Button onClick={handleChatSend} size="md" disabled={!user || !chatInput.trim()}>
-                    <Send size={16} />
+            {/* AI Doubt Solver - Height matches video card */}
+            <div 
+              style={{ 
+                height: videoPlayerRef.current ? `${videoPlayerRef.current.offsetHeight}px` : '400px'
+              }}
+            >
+              <Card className="p-0 flex flex-col h-full">
+                <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+                  <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                    <Bot size={20} className="mr-2 text-blue-600" /> AI Doubt Solver
+                  </h2>
+                  <Button variant="ghost" size="sm" onClick={() => setIsChatOpen(false)} className="lg:hidden p-1">
+                    <ChevronRight size={20} />
                   </Button>
                 </div>
+                <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                  {chatMessages.map(msg => (
+                    <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[80%] px-3 py-2 rounded-lg shadow-sm text-sm ${msg.type === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border'}`}>
+                        <div className="flex items-start space-x-1.5">
+                          {msg.type === 'ai' && <Bot size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />}
+                          <p>{msg.text}</p>
+                          {msg.type === 'user' && <UserIcon size={14} className="text-blue-200 mt-0.5 flex-shrink-0" />}
+                        </div>
+                        <p className={`text-xs mt-1 ${msg.type === 'user' ? 'text-blue-200 text-right' : 'text-gray-500'}`}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {isAiTyping && (
+                      <div className="flex justify-start">
+                          <div className="bg-white text-gray-800 border px-3 py-2 rounded-lg shadow-sm">
+                              <div className="flex items-center space-x-1.5">
+                                  <Bot size={14} className="text-blue-500" />
+                                  <div className="flex space-x-1">
+                                      {[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: `${i*0.1}s`}}></div>)}
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  )}
+                </div>
+                <div className="p-4 border-t sticky bottom-0 bg-white z-10">
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
+                      placeholder={user ? "Ask a question..." : "Login to chat"}
+                      className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      disabled={!user}
+                    />
+                    <Button onClick={handleChatSend} size="md" disabled={!user || !chatInput.trim()}>
+                      <Send size={16} />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Recommended Videos Section */}
+            <Card className="p-4 flex-grow">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                  <PlayCircleIcon size={20} className="mr-2 text-red-600"/> Recommended Videos
+              </h3>
+              <div className="space-y-3">
+                  {recommendedVideos.map(video => (
+                      <Card key={video.id} className="p-3 hover:bg-gray-50 transition-colors">
+                          <div className="flex items-start space-x-3">
+                              <img src={video.thumbnailUrl} alt={video.title} className="w-20 h-12 object-cover rounded flex-shrink-0"/>
+                              <div className="flex-1 min-w-0">
+                                  <h4 className="text-xs font-semibold text-gray-900 truncate" title={video.title}>{video.title}</h4>
+                                  <p className="text-xs text-gray-500 truncate">{video.channel}</p>
+                                  <div className="flex items-center justify-between text-xs text-gray-400 mt-0.5">
+                                      <span>{video.views}</span>
+                                      <span>{video.duration}</span>
+                                  </div>
+                                  <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      className="text-blue-600 hover:bg-blue-50 px-1 py-0.5 text-xs mt-1"
+                                      onClick={() => handleRecommendedVideoClick(video)}
+                                  >
+                                      Study this video
+                                  </Button>
+                              </div>
+                          </div>
+                      </Card>
+                  ))}
               </div>
             </Card>
           </motion.div>
         </div>
 
-        {/* Chat Toggle Button for Mobile/Tablet */}
         {!isChatOpen && (
           <Button
             variant="primary"
