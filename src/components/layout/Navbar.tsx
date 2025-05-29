@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, User, Trophy, BookOpen, Users, LogOut, Settings, ListChecks, Radio, Menu as MenuIcon, X as XIcon, Coins } from 'lucide-react'; 
+import { Brain, User, Trophy, BookOpen, Users, LogOut, Settings, ListChecks, Radio, Menu as MenuIcon, X as XIcon, Coins, Wallet2Icon, Wand2Icon, LayoutDashboardIcon } from 'lucide-react'; 
 import { useAuth } from '../../context/AuthContext';
 import { InitialStudyDataType } from '../../App';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -27,8 +27,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const tabs = [
-    { id: 'dashboard', labelKey: 'navbar.dashboard', icon: Brain },
-    { id: 'study', labelKey: 'navbar.study', icon: BookOpen },
+    { id: 'dashboard', labelKey: 'navbar.dashboard', icon: LayoutDashboardIcon },
+    { id: 'study', labelKey: 'navbar.study', icon: Wand2Icon },
     { id: 'my-topics', labelKey: 'navbar.topics', icon: ListChecks }, 
     { id: 'live-classes', labelKey: 'navbar.live', icon: Radio }, 
     { id: 'battle', labelKey: 'navbar.battle', icon: Users }, 
