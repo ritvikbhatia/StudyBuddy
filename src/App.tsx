@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Navbar, NavParamsType } from './components/layout/Navbar'; // Updated NavParamsType import
+import { Navbar, NavParamsType } from './components/layout/Navbar';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { StudyPage } from './components/study/StudyPage';
 import { StudyMaterialResponse } from './components/study/StudyMaterialResponse';
@@ -9,8 +9,8 @@ import { MyTopicsPage } from './components/topics/MyTopicsPage';
 import { BattlePage } from './components/battle/BattlePage';
 import { CommunityPage } from './components/community/CommunityPage';
 import { LiveClassesPage } from './components/live/LiveClassesPage';
-import { ChannelVideosPage } from './components/channel/ChannelVideosPage'; // New import
-import { StudyMaterial, Quiz, InputContent, VideoItem } from './types'; 
+import { ChannelVideosPage } from './components/channel/ChannelVideosPage';
+import { StudyMaterial, Quiz, InputContent } from './types'; 
 import { useTranslation } from './hooks/useTranslation';
 
 interface TopicDetailsData {
@@ -28,7 +28,7 @@ export type InitialStudyDataType = {
   content: string;
   outputLanguage?: string;
   topic?: string;
-  thumbnailUrl?: string; // Added for YouTube video context
+  thumbnailUrl?: string; 
 } | null;
 
 const InnerApp = () => {
@@ -39,13 +39,14 @@ const InnerApp = () => {
     topic: string;
     materials: StudyMaterial[];
     quiz: Quiz | null;
-    content: string;
+    content: string; 
     outputLanguage: string;
-    originalInput: InputContent;
+    originalInput: InputContent; 
   } | null>(null);
   const [currentTopicDetails, setCurrentTopicDetails] = useState<TopicDetailsData | null>(null);
   const [initialStudyData, setInitialStudyData] = useState<InitialStudyDataType>(null);
-  const [selectedChannelInfo, setSelectedChannelInfo] = useState<{ id: string; name: string; } | null>(null); // New state
+  const [selectedChannelInfo, setSelectedChannelInfo] = useState<{ id: string; name: string; } | null>(null);
+  const [currentBattleParams, setCurrentBattleParams] = useState<{ topic: string; context: string; } | null>(null); 
 
   useEffect(() => {
     if (!loadingTranslations && preferredLanguage) {
@@ -57,14 +58,17 @@ const InnerApp = () => {
     setCurrentStudyResponse(null);
     setCurrentTopicDetails(null);
     setInitialStudyData(null); 
-    setSelectedChannelInfo(null); // Clear channel info when changing main tabs
+    setSelectedChannelInfo(null);
+    setCurrentBattleParams(null); 
 
     if (navParams?.channelId && navParams?.channelName) {
       setSelectedChannelInfo({ id: navParams.channelId, name: navParams.channelName });
-      // activeTab will be set by the caller if needed, or defaults to current if just viewing channel
     } else if (navParams?.studyParams) {
       setInitialStudyData(navParams.studyParams);
-      setActiveTab(tab); // Ensure tab is set for study page
+      setActiveTab(tab);
+    } else if (navParams?.battleParams) { 
+      setCurrentBattleParams(navParams.battleParams);
+      setActiveTab(tab); 
     } else {
       setActiveTab(tab);
     }
@@ -77,14 +81,14 @@ const InnerApp = () => {
   const handleVideoSelectFromChannelPage = (videoData: { youtubeUrl: string; title: string; description: string; thumbnailUrl: string; }) => {
     setInitialStudyData({
       inputType: 'youtube',
-      inputSubType: 'external-link', // Assuming external link for now
+      inputSubType: 'external-link', 
       content: videoData.youtubeUrl,
       topic: videoData.title,
       outputLanguage: preferredLanguage || 'english',
       thumbnailUrl: videoData.thumbnailUrl,
     });
-    setSelectedChannelInfo(null); // Go back to tabbed view
-    setActiveTab('study'); // Navigate to study page
+    setSelectedChannelInfo(null); 
+    setActiveTab('study'); 
   };
 
   if (loadingTranslations) {
@@ -105,8 +109,6 @@ const InnerApp = () => {
             channelName={selectedChannelInfo.name}
             onBack={() => {
               setSelectedChannelInfo(null);
-              // Optionally, set activeTab back to 'dashboard' or previous tab
-              // setActiveTab('dashboard'); 
             }}
             onVideoSelect={handleVideoSelectFromChannelPage}
           />
@@ -132,7 +134,7 @@ const InnerApp = () => {
               setCurrentStudyResponse(null);
               handleTabChange('study');
             }}
-            onTabChange={handleTabChange}
+            onTabChange={handleTabChange} 
           />
         ) : (
           <StudyPage 
@@ -163,7 +165,7 @@ const InnerApp = () => {
               });
             }}
             isTopicView={true}
-            onTabChange={handleTabChange}
+            onTabChange={handleTabChange} 
           />
         ) : (
           <MyTopicsPage onTopicSelect={(topicData) => {
@@ -171,7 +173,7 @@ const InnerApp = () => {
           }} />
         );
       case 'battle':
-        return <BattlePage />;
+        return <BattlePage battleParams={currentBattleParams} />; 
       case 'community':
         return <CommunityPage />;
       case 'live-classes':

@@ -174,7 +174,7 @@ export interface ApiMindMapNode {
   children: ApiMindMapNode[];
 }
 
-export interface ApiQuizQuestion {
+export interface ApiQuizQuestion { // Used by text-gen API
   type: 'mcq' | 'one-word';
   question: string;
   options?: string[]; // Only for MCQ
@@ -213,8 +213,33 @@ export interface ApiAIChatResponseDataInternal {
 export interface ApiAIChatResponseTopLevel {
   status_code: number;
   data: ApiAIChatResponseDataInternal;
-  totalCount?: number; // Optional based on example
+  totalCount?: number; 
   message: string;
-  error_messages?: string[]; // Optional
+  error_messages?: string[]; 
   error: boolean;
 }
+
+// Types for the Live Questions API
+export interface ApiLiveQuestionItem { 
+  type: 'mcq' | 'one-word' | string; 
+  question: string;
+  options?: string[];
+  answer: string; 
+}
+
+export interface ApiLiveQuestionsResponseDataInternal {
+  success: boolean;
+  message: string;
+  data: ApiLiveQuestionItem[]; 
+}
+
+export interface ApiLiveQuestionsResponseTopLevel {
+  status_code: number;
+  data: ApiLiveQuestionsResponseDataInternal;
+  totalCount?: number;
+  message: string;
+  error_messages?: string[];
+  error: boolean;
+}
+
+export type ActiveToolModalType = 'flashcards' | 'mindmap' | 'summary' | 'quiz' | 'notes' | 'share' | 'listen-summary' | null;

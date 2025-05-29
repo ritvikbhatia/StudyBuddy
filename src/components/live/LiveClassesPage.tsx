@@ -9,35 +9,11 @@ import { InteractivePanel, LeaderboardEntry, MCQ } from './InteractivePanel';
 import { faker } from '@faker-js/faker';
 import { contentService, PwVideo } from '../../services/contentService';
 import axios from 'axios';
-import { ApiTranscriptItem, LiveTranscriptionApiResponse } from '../../types';
-import { aiService } from '../../services/aiService'; // Import aiService
+import { ApiTranscriptItem, LiveTranscriptionApiResponse, Question as AppQuestionType } from '../../types'; // Import AppQuestionType
+import { aiService } from '../../services/aiService';
 
 const YOUTUBE_VIDEO_ID = 'sqdwl8nfUXA';
 const LIVE_STREAM_KEY_FOR_TRANSCRIPTS = 'live_stream_key';
-
-export const liveClassMockMcqs: MCQ[] = [
-  {
-    id: 1,
-    question: "What is the primary purpose of custom hooks in React?",
-    options: ["To replace Redux", "To extract component logic into reusable functions", "To style components", "To handle routing"],
-    correctAnswerIndex: 1,
-    explanation: "Custom hooks allow you to share stateful logic between components without changing component hierarchy."
-  },
-  {
-    id: 2,
-    question: "Which React feature is used to pass data through the component tree without manual prop drilling?",
-    options: ["State", "Props", "Context API", "Refs"],
-    correctAnswerIndex: 2,
-    explanation: "The Context API is designed to share data that can be considered “global” for a tree of React components."
-  },
-  {
-    id: 3,
-    question: "What does `React.memo` help with?",
-    options: ["State management", "Memoizing functional components to prevent re-renders", "Fetching data", "Creating context"],
-    correctAnswerIndex: 1,
-    explanation: "`React.memo` is a higher-order component that memoizes your component, skipping re-renders if props haven't changed."
-  },
-];
 
 interface ChatMessage {
   id: string;
@@ -47,7 +23,7 @@ interface ChatMessage {
 }
 
 export const LiveClassesPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, preferredLanguage } = useAuth();
   const [currentTimeInSeconds, setCurrentTimeInSeconds] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false); 
   
@@ -55,9 +31,11 @@ export const LiveClassesPage: React.FC = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
-  const [liveChatId, setLiveChatId] = useState<string | null>(null); // For AI Doubt Solver session
+  const [liveChatId, setLiveChatId] = useState<string | null>(null); 
 
-  const [currentLiveMCQ, setCurrentLiveMCQ] = useState<MCQ | null>(liveClassMockMcqs[0]);
+  const [currentLiveMCQ, setCurrentLiveMCQ] = useState<MCQ | null>(null); // Initialize as null
+  const [isFetchingMCQ, setIsFetchingMCQ] = useState<boolean>(false);
+  const [mcqError, setMcqError] = useState<string | null>(null);
   const [liveMCQTimer, setLiveMCQTimer] = useState(60);
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [newQuestionIndicator, setNewQuestionIndicator] = useState(false);
@@ -72,6 +50,7 @@ export const LiveClassesPage: React.FC = () => {
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
   const videoPlayerRef = useRef<HTMLDivElement>(null);
   const transcriptPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mcqTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchTranscripts = async () => {
     if (liveTranscripts.length === 0 && !transcriptError && !loadingTranscripts) setLoadingTranscripts(true);
@@ -96,12 +75,43 @@ export const LiveClassesPage: React.FC = () => {
       setLoadingTranscripts(false);
     }
   };
+
+  const fetchNextLiveQuestion = async () => {
+    setIsFetchingMCQ(true);
+    setMcqError(null);
+    try {
+      const context = liveTranscripts.map(t => t.text).join('\n') || 'Current live class discussion.';
+      const questions: AppQuestionType[] = await aiService.generateLiveQuestionsAPI(context, 1, preferredLanguage || 'english');
+      
+      if (questions.length > 0) {
+        const apiQuestion = questions[0];
+        // Transform AppQuestionType to MCQ format
+        const newMcq: MCQ = {
+          id: parseInt(apiQuestion.id.split('-').pop() || '0', 10) || Date.now(), // Ensure ID is number
+          question: apiQuestion.question,
+          options: apiQuestion.options || [],
+          correctAnswerIndex: typeof apiQuestion.correctAnswer === 'number' ? apiQuestion.correctAnswer : 0,
+          explanation: apiQuestion.explanation || "No explanation available.",
+        };
+        setCurrentLiveMCQ(newMcq);
+        setNewQuestionIndicator(true);
+        setTimeout(() => setNewQuestionIndicator(false), 3000);
+        setLiveMCQTimer(60); // Reset timer for new question
+      } else {
+        setMcqError("No new question available at the moment.");
+      }
+    } catch (error: any) {
+      console.error("Error fetching live MCQ:", error);
+      setMcqError(error.message || "Failed to fetch question.");
+    } finally {
+      setIsFetchingMCQ(false);
+    }
+  };
   
   useEffect(() => {
     const newChatId = user ? `live-user-${user.id}-${Date.now()}` : `live-guest-${Date.now()}`;
-    setLiveChatId(faker.string.uuid()); // Or a more structured ID like above
+    setLiveChatId(faker.string.uuid()); 
     setChatMessages([{ id: 'live-initial-ai', type: 'ai', text: 'Welcome to the Live Doubt Solver! Ask anything about the ongoing class.', timestamp: new Date() }]);
-
 
     const mockLeaderboard: LeaderboardEntry[] = Array.from({ length: 10 }).map((_, i) => ({
       id: faker.string.uuid(),
@@ -117,41 +127,41 @@ export const LiveClassesPage: React.FC = () => {
     fetchTranscripts(); 
     transcriptPollIntervalRef.current = setInterval(fetchTranscripts, 5000); 
 
+    if (isVideoPlaying) fetchNextLiveQuestion(); // Fetch initial question if video is playing
+
     return () => {
-      if (transcriptPollIntervalRef.current) {
-        clearInterval(transcriptPollIntervalRef.current);
-      }
+      if (transcriptPollIntervalRef.current) clearInterval(transcriptPollIntervalRef.current);
+      if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
     };
-  }, [user]); // Add user to dependency array for chatId generation
+  }, [user]); 
 
   useEffect(() => {
     let videoTimerId: NodeJS.Timeout;
-    let mcqIntervalId: NodeJS.Timeout;
-
     if (isVideoPlaying) {
       videoTimerId = setInterval(() => {
         setCurrentTimeInSeconds(prevTime => prevTime + 1);
       }, 1000);
+    }
+    return () => clearInterval(videoTimerId);
+  }, [isVideoPlaying]);
 
-      mcqIntervalId = setInterval(() => {
+  useEffect(() => {
+    if (mcqTimerRef.current) clearInterval(mcqTimerRef.current); // Clear existing timer
+    if (isVideoPlaying && currentLiveMCQ) { // Only start timer if video is playing and there's an MCQ
+      mcqTimerRef.current = setInterval(() => {
         setLiveMCQTimer(prev => {
           if (prev === 1) {
-            const currentIndex = liveClassMockMcqs.findIndex(mcq => mcq.id === currentLiveMCQ?.id);
-            const nextIndex = (currentIndex + 1) % liveClassMockMcqs.length;
-            setCurrentLiveMCQ(liveClassMockMcqs[nextIndex]);
-            setNewQuestionIndicator(true);
-            setTimeout(() => setNewQuestionIndicator(false), 3000);
-            return 60;
+            fetchNextLiveQuestion(); // Fetch new question when timer hits 0
+            return 60; // Reset timer
           }
           return prev - 1;
         });
       }, 1000);
     }
     return () => {
-      clearInterval(videoTimerId);
-      clearInterval(mcqIntervalId);
+      if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
     };
-  }, [isVideoPlaying, currentLiveMCQ]);
+  }, [isVideoPlaying, currentLiveMCQ]); // Rerun if video playing state or current MCQ changes
   
   useEffect(() => {
     if (chatMessagesContainerRef.current) {
@@ -180,14 +190,20 @@ export const LiveClassesPage: React.FC = () => {
       const errorMessage = error.message || 'Failed to get AI response for live class. Please try again.';
       toast.error(errorMessage);
       const aiErrorMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: `Sorry, I couldn't process that: ${errorMessage}`, timestamp: new Date() };
-      // @ts-ignore // TODO: Fix this type mismatch if `content` vs `text` is an issue. For now, assume ChatMessage text prop.
+      // @ts-ignore 
       setChatMessages(prev => [...prev, aiErrorMessage]);
     } finally {
       setIsAiTyping(false);
     }
   };
 
-  const togglePlayPause = () => setIsVideoPlaying(!isVideoPlaying);
+  const togglePlayPause = () => {
+    const newPlayState = !isVideoPlaying;
+    setIsVideoPlaying(newPlayState);
+    if (newPlayState && !currentLiveMCQ && !isFetchingMCQ) { // If video starts playing and no MCQ, fetch one
+        fetchNextLiveQuestion();
+    }
+  };
 
   const handleQuizAnswerSubmit = (isCorrect: boolean) => {
     if (isCorrect) {
@@ -220,17 +236,12 @@ export const LiveClassesPage: React.FC = () => {
     } else {
       toast.error("Incorrect. Try the next one!");
     }
-    const currentIndex = liveClassMockMcqs.findIndex(mcq => mcq.id === currentLiveMCQ?.id);
-    const nextIndex = (currentIndex + 1) % liveClassMockMcqs.length;
-    setCurrentLiveMCQ(liveClassMockMcqs[nextIndex]);
-    setLiveMCQTimer(60);
-    setNewQuestionIndicator(true);
-    setTimeout(() => setNewQuestionIndicator(false), 3000);
+    // Fetch next question immediately after an answer
+    fetchNextLiveQuestion();
   };
 
   const handleRecommendedVideoClick = (video: PwVideo) => {
     toast(`Navigating to study: ${video.title}`);
-    // Actual navigation logic would be here, e.g., using onTabChange if passed down
   };
 
   return (
@@ -272,6 +283,8 @@ export const LiveClassesPage: React.FC = () => {
               loadingTranscripts={loadingTranscripts}
               transcriptError={transcriptError}
               currentMCQ={currentLiveMCQ}
+              isFetchingMCQ={isFetchingMCQ}
+              mcqError={mcqError}
               mcqTimer={liveMCQTimer}
               leaderboardData={leaderboardData}
               newQuestionIndicator={newQuestionIndicator}

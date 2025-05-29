@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ListChecks, HelpCircle, BarChart3, CheckCircle, XCircle, Clock, Award, Loader2, AlertTriangle } from 'lucide-react'; // Added Loader2, AlertTriangle
+import { ListChecks, HelpCircle, BarChart3, CheckCircle, XCircle, Clock, Award, Loader2, AlertTriangle } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { ApiTranscriptItem } from '../../types'; // Import new type
+import { ApiTranscriptItem } from '../../types';
 
 export interface LeaderboardEntry {
   id: string;
@@ -11,10 +11,10 @@ export interface LeaderboardEntry {
   avatar: string;
   score: number;
   correctAnswers: number;
-  avgTime: number; // in seconds
+  avgTime: number; 
 }
 
-export interface MCQ { // Re-defining MCQ here if not imported from LiveClassesPage
+export interface MCQ { 
   id: number;
   question: string;
   options: string[];
@@ -24,17 +24,18 @@ export interface MCQ { // Re-defining MCQ here if not imported from LiveClassesP
 
 interface InteractivePanelProps {
   currentSimulatedTime: number;
-  liveTranscripts: ApiTranscriptItem[]; // Updated prop
+  liveTranscripts: ApiTranscriptItem[]; 
   loadingTranscripts: boolean;
   transcriptError: string | null;
   currentMCQ: MCQ | null;
+  isFetchingMCQ: boolean; // New prop for loading state of MCQ
+  mcqError: string | null; // New prop for error state of MCQ
   mcqTimer: number;
   leaderboardData: LeaderboardEntry[];
   newQuestionIndicator: boolean;
   onQuizAnswerSubmit: (isCorrect: boolean) => void;
 }
 
-// Helper function to parse timeline string like "[0s - 10s]"
 const parseTimeline = (timeline: string): { start: number; end: number } | null => {
   const match = timeline.match(/\[(\d+)s - (\d+)s\]/);
   if (match && match[1] && match[2]) {
@@ -50,6 +51,8 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
   loadingTranscripts,
   transcriptError,
   currentMCQ,
+  isFetchingMCQ, // Use new prop
+  mcqError, // Use new prop
   mcqTimer,
   leaderboardData,
   newQuestionIndicator,
@@ -62,7 +65,6 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
   const [activeTranscriptIndex, setActiveTranscriptIndex] = useState<number>(-1);
 
   useEffect(() => {
-    // Determine active transcript segment
     let foundActiveIndex = -1;
     for (let i = 0; i < liveTranscripts.length; i++) {
       const timelineRange = parseTimeline(liveTranscripts[i].timeline);
@@ -70,7 +72,6 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
         foundActiveIndex = i;
         break;
       }
-      // If no exact match, highlight the one whose start time is closest but not past current time
       if (timelineRange && currentSimulatedTime >= timelineRange.start) {
         foundActiveIndex = i; 
       }
@@ -81,7 +82,7 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
   }, [currentSimulatedTime, liveTranscripts, activeTranscriptIndex]);
 
   useEffect(() => {
-    if (transcriptContainerRef.current && activeTranscriptIndex !== -1) {
+    if (transcriptContainerRef.current && activeTranscriptIndex !== -1 && transcriptContainerRef.current.children[activeTranscriptIndex]) {
       const activeElement = transcriptContainerRef.current.children[activeTranscriptIndex] as HTMLElement;
       if (activeElement) {
         activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -158,7 +159,7 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
               )}
               {liveTranscripts.map((segment, index) => (
                 <motion.p
-                  key={index} // Use index as key since API might not provide unique IDs for transcripts
+                  key={`${segment.timeline}-${index}`} 
                   initial={{ opacity: 0.6 }}
                   animate={{ opacity: activeTranscriptIndex === index ? 1 : 0.7, 
                              fontWeight: activeTranscriptIndex === index ? '600' : '400',
@@ -175,55 +176,73 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
             </motion.div>
           )}
 
-          {activeTab === 'quiz' && currentMCQ && (
+          {activeTab === 'quiz' && (
             <motion.div 
-              key={`quiz-${currentMCQ.id}`}
+              key={`quiz-content`}
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-md sm:text-lg font-semibold text-gray-800">Live Quiz Question</h3>
-                <div className="flex items-center space-x-2 text-sm text-red-600 bg-red-50 px-2 py-1 rounded-full">
-                  <Clock size={14} />
-                  <span>Time left: {mcqTimer}s</span>
+                {currentMCQ && !isFetchingMCQ && !mcqError && (
+                  <div className="flex items-center space-x-2 text-sm text-red-600 bg-red-50 px-2 py-1 rounded-full">
+                    <Clock size={14} />
+                    <span>Time left: {mcqTimer}s</span>
+                  </div>
+                )}
+              </div>
+              {isFetchingMCQ && (
+                <div className="text-center py-10 text-gray-500">
+                  <Loader2 size={32} className="mx-auto animate-spin mb-2 text-blue-600" />
+                  <p>Fetching new question...</p>
                 </div>
-              </div>
-              <p className="text-gray-700 font-medium text-sm sm:text-base mb-3">{currentMCQ.question}</p>
-              <div className="space-y-2">
-                {currentMCQ.options.map((option, index) => (
-                  <Button
-                    key={index}
-                    variant={selectedMCQAnswer === index ? (mcqFeedback?.correct ? 'primary' : 'secondary') : 'outline'}
-                    size="md"
-                    className={`w-full justify-start text-left h-auto py-2 text-xs sm:text-sm
-                                ${selectedMCQAnswer === index && mcqFeedback?.correct ? 'bg-green-500 hover:bg-green-600 border-green-500 text-white' : ''}
-                                ${selectedMCQAnswer === index && mcqFeedback && !mcqFeedback.correct ? 'bg-red-500 hover:bg-red-600 border-red-500 text-white' : ''}
-                                ${mcqFeedback && selectedMCQAnswer !== index ? 'opacity-60 cursor-not-allowed' : ''}
-                              `}
-                    onClick={() => handleMCQSelect(index)}
-                    disabled={!!mcqFeedback}
-                  >
-                    {mcqFeedback && selectedMCQAnswer === index && (mcqFeedback.correct ? <CheckCircle size={16} className="mr-1.5"/> : <XCircle size={16} className="mr-1.5"/>)}
-                    {option}
-                  </Button>
-                ))}
-              </div>
-              {mcqFeedback && (
-                <motion.div 
-                  initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} 
-                  className={`p-2.5 rounded-lg text-xs sm:text-sm mt-3 ${mcqFeedback.correct ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
-                >
-                  <p className="font-semibold">{mcqFeedback.correct ? 'Correct!' : 'Incorrect.'}</p>
-                  <p>{mcqFeedback.explanation}</p>
+              )}
+              {mcqError && !isFetchingMCQ && (
+                <div className="text-center py-10 text-red-500 p-4 bg-red-50 rounded-md">
+                  <AlertTriangle size={32} className="mx-auto mb-2" />
+                  <p>{mcqError}</p>
+                </div>
+              )}
+              {currentMCQ && !isFetchingMCQ && !mcqError && (
+                <>
+                  <p className="text-gray-700 font-medium text-sm sm:text-base mb-3">{currentMCQ.question}</p>
+                  <div className="space-y-2">
+                    {currentMCQ.options.map((option, index) => (
+                      <Button
+                        key={index}
+                        variant={selectedMCQAnswer === index ? (mcqFeedback?.correct ? 'primary' : 'secondary') : 'outline'}
+                        size="md"
+                        className={`w-full justify-start text-left h-auto py-2 text-xs sm:text-sm
+                                    ${selectedMCQAnswer === index && mcqFeedback?.correct ? 'bg-green-500 hover:bg-green-600 border-green-500 text-white' : ''}
+                                    ${selectedMCQAnswer === index && mcqFeedback && !mcqFeedback.correct ? 'bg-red-500 hover:bg-red-600 border-red-500 text-white' : ''}
+                                    ${mcqFeedback && selectedMCQAnswer !== index ? 'opacity-60 cursor-not-allowed' : ''}
+                                  `}
+                        onClick={() => handleMCQSelect(index)}
+                        disabled={!!mcqFeedback}
+                      >
+                        {mcqFeedback && selectedMCQAnswer === index && (mcqFeedback.correct ? <CheckCircle size={16} className="mr-1.5"/> : <XCircle size={16} className="mr-1.5"/>)}
+                        {option}
+                      </Button>
+                    ))}
+                  </div>
+                  {mcqFeedback && (
+                    <motion.div 
+                      initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} 
+                      className={`p-2.5 rounded-lg text-xs sm:text-sm mt-3 ${mcqFeedback.correct ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+                    >
+                      <p className="font-semibold">{mcqFeedback.correct ? 'Correct!' : 'Incorrect.'}</p>
+                      <p>{mcqFeedback.explanation}</p>
+                    </motion.div>
+                  )}
+                  {!mcqFeedback && <p className="text-xs text-gray-500 mt-2 text-center">Select an answer. New question in {mcqTimer}s.</p>}
+                </>
+              )}
+              {!currentMCQ && !isFetchingMCQ && !mcqError && (
+                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1}} className="text-center py-10 text-gray-500">
+                    <HelpCircle size={32} className="mx-auto mb-2"/>
+                    <p>Quiz questions will appear here periodically.</p>
                 </motion.div>
               )}
-              {!mcqFeedback && <p className="text-xs text-gray-500 mt-2 text-center">Select an answer. New question in {mcqTimer}s.</p>}
-            </motion.div>
-          )}
-          {activeTab === 'quiz' && !currentMCQ && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1}} className="text-center py-10 text-gray-500">
-                <HelpCircle size={32} className="mx-auto mb-2"/>
-                <p>Quiz questions will appear here periodically.</p>
             </motion.div>
           )}
 

@@ -72,7 +72,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
         setRecommendedChannels(response.data.data);
       } else {
         toast.error('Failed to fetch recommended channels.');
-        console.error('API error fetching channels: ', response.data);
+        console.error('API error fetching channels:', response.data);
       }
     } catch (error) {
       toast.error('Error fetching recommended channels.');

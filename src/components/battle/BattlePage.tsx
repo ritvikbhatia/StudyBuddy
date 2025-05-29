@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sword, Users, Clock, Trophy, Star, Zap, Shield, UserCheck, HelpCircle, ChevronRight } from 'lucide-react';
+import { Sword, Users, Clock, Trophy, Star, Zap, Shield, UserCheck, HelpCircle, ChevronRight, Loader2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -19,7 +19,11 @@ interface Opponent {
 
 type BattleState = 'idle' | 'matching' | 'battling' | 'results';
 
-export const BattlePage: React.FC = () => {
+interface BattlePageProps {
+  battleParams?: { topic: string; context: string; } | null; // Receive context from App.tsx
+}
+
+export const BattlePage: React.FC<BattlePageProps> = ({ battleParams }) => {
   const { user } = useAuth();
   const [battleState, setBattleState] = useState<BattleState>('idle');
   const [opponent, setOpponent] = useState<Opponent | null>(null);
@@ -30,9 +34,12 @@ export const BattlePage: React.FC = () => {
   const [userAnswer, setUserAnswer] = useState<string | number | null>(null);
   const [isOpponentAnswering, setIsOpponentAnswering] = useState(false);
   const [battleWinner, setBattleWinner] = useState<'user' | 'opponent' | 'draw' | null>(null);
-  const [battleTopic, setBattleTopic] = useState<string>('General Knowledge');
+  
+  // Use battleParams if available, otherwise fall back to state or default
+  const [battleTopic, setBattleTopic] = useState<string>(battleParams?.topic || 'General Knowledge');
   const [battleDifficulty, setBattleDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [answerSubmittedThisTurn, setAnswerSubmittedThisTurn] = useState<boolean>(false);
+  const [isPreparingBattle, setIsPreparingBattle] = useState(false);
 
   const [battleHistory, setBattleHistory] = useState<any[]>([]);
    useEffect(() => {
@@ -41,6 +48,14 @@ export const BattlePage: React.FC = () => {
     }
   }, [user, battleState]);
 
+  useEffect(() => {
+    // If battleParams change (e.g., user navigated here with new params), update local state
+    if (battleParams) {
+      setBattleTopic(battleParams.topic);
+      // Potentially set difficulty based on context or keep default
+    }
+  }, [battleParams]);
+
 
   const startMatching = async (topic: string, difficulty: 'easy' | 'medium' | 'hard') => {
     if (!user) {
@@ -48,7 +63,8 @@ export const BattlePage: React.FC = () => {
       return;
     }
     setBattleState('matching');
-    setBattleTopic(topic);
+    setIsPreparingBattle(true);
+    setBattleTopic(topic); // Set topic for this specific battle
     setBattleDifficulty(difficulty);
     setUserScore(0);
     setOpponentScore(0);
@@ -57,7 +73,7 @@ export const BattlePage: React.FC = () => {
     setUserAnswer(null);
     setAnswerSubmittedThisTurn(false); 
 
-    await new Promise(resolve => setTimeout(resolve, 2500)); 
+    await new Promise(resolve => setTimeout(resolve, 1500)); 
     const newOpponent: Opponent = {
       id: faker.string.uuid(),
       name: faker.person.fullName(),
@@ -67,33 +83,35 @@ export const BattlePage: React.FC = () => {
     setOpponent(newOpponent);
 
     try {
-      const quiz = await aiService.generateQuiz(topic, difficulty, 'english'); // Battle quizzes are in English for now
+      const contextForAPI = battleParams?.context || "General knowledge questions for a quiz battle."; // Use passed context or default
+      const questions = await aiService.generateLiveQuestionsAPI(contextForAPI, 5, 'english');
       
-      // Ensure we have exactly 5 questions for a battle
-      let finalQuestions = quiz.questions;
-      if (finalQuestions.length < 5) {
-        const additionalQuestionsData = await aiService.generateQuiz(topic, difficulty, 'english');
-        finalQuestions = [...finalQuestions, ...additionalQuestionsData.questions].slice(0,5);
-      } else if (finalQuestions.length > 5) {
-        finalQuestions = finalQuestions.slice(0, 5);
-      }
-      // If still less than 5 (e.g. AI service consistently returns few), duplicate last one or handle error
-      while (finalQuestions.length < 5 && finalQuestions.length > 0) {
-        finalQuestions.push({...finalQuestions[finalQuestions.length-1], id: faker.string.uuid()});
-      }
-      if (finalQuestions.length < 5) {
+      if (questions.length < 5) {
           toast.error("Could not generate enough questions for the battle. Please try another topic or difficulty.");
           setBattleState('idle');
+          setIsPreparingBattle(false);
           return;
       }
 
-      setBattleQuiz({...quiz, questions: finalQuestions});
-      await new Promise(resolve => setTimeout(resolve, 1500)); 
+      const newBattleQuiz: Quiz = {
+        id: `battle-quiz-${Date.now()}`,
+        title: `${topic} Battle Quiz`,
+        topic: topic,
+        questions: questions.slice(0, 5), // Ensure exactly 5 questions
+        difficulty: difficulty,
+        timeLimit: 5 * 60, // 5 minutes for 5 questions
+        createdAt: new Date(),
+        language: 'english',
+      };
+      setBattleQuiz(newBattleQuiz);
+      await new Promise(resolve => setTimeout(resolve, 1000)); 
       setBattleState('battling');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Battle Quiz Generation Error:", error);
-      toast.error("Failed to prepare battle quiz. Please try again.");
+      toast.error(error.message || "Failed to prepare battle quiz. Please try again.");
       setBattleState('idle');
+    } finally {
+        setIsPreparingBattle(false);
     }
   };
 
@@ -108,7 +126,7 @@ export const BattlePage: React.FC = () => {
     if (question.type === 'mcq') {
       currentUserCorrect = answer === question.correctAnswer;
     } else { 
-      currentUserCorrect = (answer as string).length > 5; 
+      currentUserCorrect = (answer as string).length > 0; // Simple check for subjective
     }
     if (currentUserCorrect) setUserScore(s => s + question.points);
 
@@ -161,9 +179,9 @@ export const BattlePage: React.FC = () => {
   };
   
   const quickBattleOptions = [
-    { topic: "General Knowledge", difficulty: "easy" as const },
-    { topic: "Science Trivia", difficulty: "medium" as const },
-    { topic: "History Facts", difficulty: "hard" as const },
+    { topic: "General Knowledge", difficulty: "medium" as const, context: "General knowledge questions covering various fields." },
+    { topic: "Science Trivia", difficulty: "easy" as const, context: "Basic science trivia questions suitable for beginners." },
+    { topic: "History Facts", difficulty: "hard" as const, context: "Challenging history facts from around the world." },
   ];
 
   const currentQuestionData = battleQuiz?.questions[currentQuestionIndex];
@@ -229,8 +247,10 @@ export const BattlePage: React.FC = () => {
                     size="lg"
                     variant="outline"
                     className="flex flex-col h-auto py-4"
-                    onClick={() => startMatching(opt.topic, opt.difficulty)}
+                    onClick={() => startMatching(opt.topic, opt.difficulty)} // Quick battles use default context
+                    disabled={isPreparingBattle}
                   >
+                    <span className="text-lg font-semibold">{opt.topic}</span>
                     <span className={`text-sm capitalize px-2 py-0.5 rounded-full mt-1 ${
                       opt.difficulty === 'easy' ? 'bg-green-100 text-green-700' : 
                       opt.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700' : 
@@ -281,16 +301,18 @@ export const BattlePage: React.FC = () => {
             exit={{ opacity: 0, scale: 0.8 }}
             className="text-center py-12 space-y-6"
           >
-            <h2 className="text-2xl font-semibold text-gray-800">Finding Opponent for {battleTopic}...</h2>
+            <h2 className="text-2xl font-semibold text-gray-800">
+              {isPreparingBattle ? "Preparing Battle..." : `Finding Opponent for ${battleTopic}...`}
+            </h2>
             <div className="relative w-48 h-48 mx-auto">
               <motion.div 
                 className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full"
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
               />
-              <UserCheck size={64} className="absolute inset-0 m-auto text-blue-500" />
+              {isPreparingBattle ? <Loader2 size={64} className="absolute inset-0 m-auto text-blue-500 animate-spin" /> : <UserCheck size={64} className="absolute inset-0 m-auto text-blue-500" />}
             </div>
-            {opponent && (
+            {opponent && !isPreparingBattle && (
                 <motion.div initial={{opacity:0}} animate={{opacity:1}} className="mt-6">
                     <p className="text-lg text-gray-700">Opponent Found!</p>
                     <img src={opponent.avatar} alt={opponent.name} className="w-20 h-20 rounded-full mx-auto my-3 border-4 border-green-500"/>

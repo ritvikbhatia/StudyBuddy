@@ -6,16 +6,16 @@ import { AuthModal } from '../auth/AuthModal';
 import { InitialStudyDataType } from '../../App';
 import { useTranslation } from '../../hooks/useTranslation';
 
-// Define a more generic type for navigation parameters
 export type NavParamsType = {
   studyParams?: InitialStudyDataType;
   channelId?: string;
   channelName?: string;
+  battleParams?: { topic: string; context: string; }; 
 };
 
 interface NavbarProps {
   activeTab: string;
-  onTabChange: (tab: string, navParams?: NavParamsType) => void; // Use NavParamsType
+  onTabChange: (tab: string, navParams?: NavParamsType) => void; 
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                       key={tab.id}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => onTabChange(tab.id)} // Pass only tab id for main tabs
+                      onClick={() => onTabChange(tab.id)} 
                       className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-all duration-200 ${
                         activeTab === tab.id
                           ? 'bg-blue-100 text-blue-700'

@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker';
-import { StudyMaterial, Question, Quiz, InputContent, ApiGenerateStudyMaterialsResponse, ApiQuizQuestion, ApiFlashcard, ApiMindMapNode, ApiAIChatResponseTopLevel } from '../types';
+import { StudyMaterial, Question, Quiz, InputContent, ApiGenerateStudyMaterialsResponse, ApiQuizQuestion, ApiFlashcard, ApiMindMapNode, ApiAIChatResponseTopLevel, ApiLiveQuestionsResponseTopLevel, ApiLiveQuestionItem } from '../types';
 import axios from 'axios';
 
 // Helper for language-specific mock text
@@ -36,7 +36,7 @@ class AIService {
     await new Promise(resolve => setTimeout(resolve, delay));
   }
 
-  // New method for AI Chat API
+  // AI Chat API
   async getAIChatResponse(context: string, question: string, chatId: string): Promise<string> {
     const apiUrl = 'https://qbg-backend-stage.penpencil.co/qbg/internal/answer-question';
     const payload = {
@@ -53,7 +53,7 @@ class AIService {
       });
 
       if (response.data && response.data.status_code === 201 && response.data.data && response.data.data.success) {
-        return response.data.data.data; // This is the AI's answer string
+        return response.data.data.data; 
       } else {
         console.error('AI Chat API Error - Unexpected response structure:', response.data);
         const errorMsg = response.data?.message || 'Failed to get AI chat response due to unexpected data format.';
@@ -66,8 +66,60 @@ class AIService {
     }
   }
 
+  // Live Questions API
+  async generateLiveQuestionsAPI(context: string, count: number, outputLanguage: string = 'english'): Promise<Question[]> {
+    const apiUrl = 'https://qbg-backend-stage.penpencil.co/qbg/internal/live-questions';
+    const payload = {
+      context,
+      count: count.toString(), // API expects count as string
+    };
 
-  // Method to call the external API for text-based study material generation
+    try {
+      const response = await axios.post<ApiLiveQuestionsResponseTopLevel>(apiUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.data && response.data.status_code === 201 && response.data.data && response.data.data.success && Array.isArray(response.data.data.data)) {
+        const apiQuestions: ApiLiveQuestionItem[] = response.data.data.data;
+        return apiQuestions.map((apiQ: ApiLiveQuestionItem, index: number): Question => {
+          if (apiQ.type === 'mcq') {
+            const correctAnswerIndex = apiQ.options?.findIndex(opt => opt === apiQ.answer) ?? -1;
+            return {
+              id: `live-q-${Date.now()}-${index}`,
+              type: 'mcq',
+              question: apiQ.question,
+              options: apiQ.options || [],
+              correctAnswer: correctAnswerIndex !== -1 ? correctAnswerIndex : 0, 
+              explanation: getMockText(outputLanguage, 'sentence', `Explanation for API MCQ ${index + 1}`, 1),
+              points: 5,
+            };
+          } else { // Assuming 'one-word' or other types map to subjective
+            return {
+              id: `live-q-${Date.now()}-${index}`,
+              type: 'subjective',
+              question: apiQ.question,
+              correctAnswer: apiQ.answer,
+              explanation: getMockText(outputLanguage, 'sentence', `Explanation for API Subjective ${index + 1}`, 1),
+              points: 10,
+            };
+          }
+        });
+      } else {
+        console.error('Live Questions API Error - Unexpected response structure:', response.data);
+        const errorMsg = response.data?.message || 'Failed to generate live questions due to unexpected data format.';
+        throw new Error(errorMsg);
+      }
+    } catch (error: any) {
+      console.error('Live Questions API Network/Request Error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Network error or server issue with Live Questions API.';
+      throw new Error(errorMessage);
+    }
+  }
+
+
+  // Text-based study material generation API
   async generateStudyMaterialsFromTextAPI(
     textContent: string,
     topic: string,
@@ -98,19 +150,21 @@ class AIService {
     const materials: StudyMaterial[] = [];
     const baseId = `api-${Date.now()}`;
 
+    // Mindmap
     if (apiData.mindmap) {
       materials.push({
         id: `${baseId}-mindmap`,
         title: getMockText(outputLanguage, 'title', `${topic} Mind Map`, 1),
         type: 'mindmap',
-        content: apiData.mindmap,
+        content: apiData.mindmap, // API structure is directly usable
         topic,
         createdAt: new Date(),
-        userId: 'current-user', 
+        userId: 'current-user', // Placeholder, should be actual user ID
         language: outputLanguage,
       });
     }
 
+    // Flashcards
     if (apiData.flashcards && apiData.flashcards.length > 0) {
       materials.push({
         id: `${baseId}-flashcards`,
@@ -118,7 +172,7 @@ class AIService {
         type: 'flashcards',
         content: {
           cards: apiData.flashcards.map((fc: ApiFlashcard, index: number) => ({
-            id: `${index + 1}`,
+            id: `${baseId}-fc-${index + 1}`,
             question: fc.question,
             answer: fc.answer,
             difficulty: faker.helpers.arrayElement(['easy', 'medium', 'hard']),
@@ -131,6 +185,7 @@ class AIService {
       });
     }
 
+    // Summary
     if (apiData.summary && apiData.summary.text) {
       materials.push({
         id: `${baseId}-summary`,
@@ -144,24 +199,25 @@ class AIService {
       });
     }
     
+    // Quiz
     let generatedQuiz: Quiz | null = null;
     if (apiData.quiz && apiData.quiz.length > 0) {
       const questions: Question[] = apiData.quiz.map((apiQ: ApiQuizQuestion, index: number) => {
         if (apiQ.type === 'mcq') {
           const correctAnswerIndex = apiQ.options?.findIndex(opt => opt === apiQ.answer) ?? -1;
           return {
-            id: `api-q-${index + 1}`,
+            id: `${baseId}-q-${index + 1}`,
             type: 'mcq',
             question: apiQ.question,
             options: apiQ.options || [],
-            correctAnswer: correctAnswerIndex !== -1 ? correctAnswerIndex : 0,
+            correctAnswer: correctAnswerIndex !== -1 ? correctAnswerIndex : 0, // Default to first option if answer not found
             explanation: getMockText(outputLanguage, 'sentence', `Explanation for API MCQ ${index + 1}`, 1),
             points: 5,
           };
-        } else { 
+        } else { // Assuming 'one-word' type
           return {
-            id: `api-q-${index + 1}`,
-            type: 'subjective',
+            id: `${baseId}-q-${index + 1}`,
+            type: 'subjective', // Map 'one-word' to 'subjective'
             question: apiQ.question,
             correctAnswer: apiQ.answer,
             explanation: getMockText(outputLanguage, 'sentence', `Explanation for API One-Word ${index + 1}`, 1),
@@ -171,12 +227,12 @@ class AIService {
       });
 
       generatedQuiz = {
-        id: `api-quiz-${Date.now()}`,
+        id: `${baseId}-quiz`,
         title: getMockText(outputLanguage, 'title', `${topic} Quiz (API Generated)`, 1),
         topic,
         questions,
-        difficulty: 'medium',
-        timeLimit: questions.length * 90,
+        difficulty: 'medium', // Default difficulty
+        timeLimit: questions.length * 90, // 90 seconds per question
         createdAt: new Date(),
         language: outputLanguage,
       };
@@ -187,7 +243,7 @@ class AIService {
         content: textContent,
         metadata: {
             outputLanguage: outputLanguage,
-            title: topic,
+            title: topic, // Assuming topic passed to API is the main title
         }
     };
 
@@ -221,10 +277,10 @@ class AIService {
     const originalInputData: InputContent = {
         type: inputType,
         content: content,
-        metadata: { // Ensure metadata is always an object
-            ...(metadata || {}), // Spread existing metadata or an empty object
-            outputLanguage: outputLanguage, // Explicitly set/override
-            title: metadata?.title || topic, // Ensure title is set
+        metadata: { 
+            ...(metadata || {}), 
+            outputLanguage: outputLanguage, 
+            title: metadata?.title || topic, 
         }
     };
 
@@ -247,8 +303,9 @@ class AIService {
     await this.simulateProcessing(2000, 4000);
 
     const materials: StudyMaterial[] = [];
-    const baseId = Date.now();
+    const baseId = `mock-${Date.now()}`;
 
+    // Summary
     materials.push({
       id: `${baseId}-summary`,
       title: getMockText(outputLanguage, 'title', `${topic} Summary`, 1),
@@ -260,6 +317,7 @@ class AIService {
       language: outputLanguage,
     });
 
+    // Cheatsheet
     materials.push({
       id: `${baseId}-cheatsheet`,
       title: getMockText(outputLanguage, 'title', `${topic} Cheatsheet`, 1),
@@ -271,6 +329,7 @@ class AIService {
       language: outputLanguage,
     });
 
+    // Flashcards
     materials.push({
       id: `${baseId}-flashcards`,
       title: getMockText(outputLanguage, 'title', `${topic} Flashcards`, 1),
@@ -282,6 +341,7 @@ class AIService {
       language: outputLanguage,
     });
 
+    // Mind Map
     materials.push({
       id: `${baseId}-mindmap`,
       title: getMockText(outputLanguage, 'title', `${topic} Mind Map`, 1),
@@ -296,12 +356,6 @@ class AIService {
     return materials;
   }
 
-  // This was the old mock chat response, now replaced by getAIChatResponse
-  // async generateChatResponse(question: string, topic: string, content: string, outputLanguage: string): Promise<string> {
-  //   await this.simulateProcessing(1000, 2500);
-  //   const langPrefix = outputLanguage !== 'english' ? `[${outputLanguage.toUpperCase()}] ` : '';
-  //   return `${langPrefix}AI Tutor response for '${question}' regarding ${topic}: ${getMockText(outputLanguage, 'paragraph', topic, 1)}`;
-  // }
 
   private generateSummaryContent(content: string, topic: string, language: string): string {
     return `# ${getMockText(language, 'title', `${topic} Summary`, 1)}
@@ -332,7 +386,7 @@ ${getMockText(language, 'paragraph', topic, 2)}`;
   private generateFlashcardsContent(content: string, topic: string, language: string): any {
     return {
       cards: Array.from({ length: 3 }).map((_, i) => ({
-        id: `${i + 1}`,
+        id: `mock-fc-${i + 1}`,
         question: `${getMockText(language, 'sentence', `Question ${i+1} for ${topic}`, 1)}?`,
         answer: getMockText(language, 'sentence', `Answer ${i+1} for ${topic}`, 1),
         difficulty: faker.helpers.arrayElement(['easy', 'medium', 'hard']),
@@ -341,11 +395,27 @@ ${getMockText(language, 'paragraph', topic, 2)}`;
   }
 
   private generateMindMapContent(content: string, topic: string, language: string): any {
+    // Return data in the format of ApiMindMapNode for consistency with the new API
     return {
-      central: getMockText(language, 'words', topic, 1),
-      branches: Array.from({ length: 3 }).map((_, i) => ({
+      id: "root",
+      title: getMockText(language, 'words', topic, 1),
+      x: 400,
+      y: 300,
+      color: "#3b82f6", // blue-500
+      children: Array.from({ length: 3 }).map((_, i) => ({
+        id: `child${i+1}`,
         title: getMockText(language, 'words', `Branch ${i+1}`, 2),
-        subtopics: Array.from({ length: 2 }).map((__, j) => getMockText(language, 'words', `Subtopic ${j+1}`, 2))
+        x: 200 + i * 100,
+        y: 150 + i * 50,
+        color: faker.color.rgb(),
+        children: Array.from({ length: 2 }).map((__, j) => ({
+          id: `subchild${i+1}-${j+1}`,
+          title: getMockText(language, 'words', `Subtopic ${j+1}`, 2),
+          x: 100 + j * 50,
+          y: 100 + j * 30,
+          color: faker.color.rgb(),
+          children: []
+        }))
       }))
     };
   }
@@ -356,18 +426,18 @@ ${getMockText(language, 'paragraph', topic, 2)}`;
     const questionCount = 5; 
 
     for (let i = 0; i < questionCount; i++) {
-      if (i % 2 === 0) { 
+      if (i % 2 === 0) { // Subjective
         questions.push({
-          id: `q${i + 1}`,
+          id: `mock-q-${i + 1}`,
           type: 'subjective',
           question: getMockText(language, 'sentence', `Explain concept ${i+1} in ${topic}`, 1),
           correctAnswer: getMockText(language, 'paragraph', `Correct answer for concept ${i+1}`, 1),
           explanation: getMockText(language, 'sentence', `Explanation for concept ${i+1}`, 1),
           points: 10,
         });
-      } else {
+      } else { // MCQ
         questions.push({
-          id: `q${i + 1}`,
+          id: `mock-q-${i + 1}`,
           type: 'mcq',
           question: getMockText(language, 'sentence', `Which describes ${topic} aspect ${i+1}`, 1) + '?',
           options: Array.from({length: 4}).map((_, optIdx) => getMockText(language, 'sentence', `Option ${optIdx+1}`, 1)),
@@ -379,18 +449,98 @@ ${getMockText(language, 'paragraph', topic, 2)}`;
     }
 
     return {
-      id: `quiz-${Date.now()}`,
+      id: `mock-quiz-${Date.now()}`,
       title: getMockText(language, 'title', `${topic} Quiz (${difficulty})`, 1),
       topic,
       questions,
       difficulty,
-      timeLimit: questionCount * 90, 
+      timeLimit: questionCount * 90, // 90 seconds per question
       createdAt: new Date(),
       language: language,
     };
   }
 
+  // New method for generating audio from text
+  async generateAudioFromText(text: string): Promise<Blob> {
+    const apiUrl = 'https://abf8-223-181-126-21.ngrok-free.app/generate-audio-from-text';
+    const payload = { text };
+
+    try {
+      const response = await axios.post<Blob>(apiUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        responseType: 'blob',
+      });
+
+      if (response.status === 200 && response.data instanceof Blob && response.data.type.startsWith('audio/')) {
+        return response.data;
+      } else {
+        let errorMessage = 'Failed to generate audio. API returned unexpected response or non-audio content.';
+        if (response.data && !(response.data instanceof Blob)) {
+            try {
+                const errorData = JSON.parse(await (response.data as any).text());
+                errorMessage = errorData.message || errorMessage;
+            } catch (e) { /* ignore parsing error if response data is not JSON text */ }
+        } else if (response.data instanceof Blob && !response.data.type.startsWith('audio/')) {
+            errorMessage = `API returned a Blob, but it's not an audio type. Received: ${response.data.type}`;
+        }
+        console.error('Audio Generation API Error - Unexpected response:', response);
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error('Audio Generation API Network/Request Error (raw):', error);
+      let errorMessage = 'Network error or server issue with Audio Generation API.';
+
+      if (error.response) {
+        console.error('API Response Error Status:', error.response.status);
+        console.error('API Response Headers:', error.response.headers);
+
+        if (error.response.data) {
+          if (error.response.data instanceof Blob) {
+            try {
+              const errorText = await error.response.data.text();
+              console.error('API Error Blob Content (as text):', errorText);
+              try {
+                const jsonData = JSON.parse(errorText);
+                if (jsonData && jsonData.message) {
+                  errorMessage = `Server Error: ${jsonData.message}`;
+                } else {
+                  errorMessage = `Server responded with an error (Blob): ${errorText.substring(0, 150)}`;
+                }
+              } catch (jsonParseError) {
+                errorMessage = `Server responded with an unparseable error (Blob): ${errorText.substring(0, 150)}`;
+              }
+            } catch (blobReadError) {
+              console.error('Could not read error response blob:', blobReadError);
+              errorMessage = `Server responded with an unreadable error (Blob, status ${error.response.status}).`;
+            }
+          } else if (typeof error.response.data === 'object' && error.response.data !== null && (error.response.data as any).message) {
+            errorMessage = `Server Error: ${(error.response.data as any).message}`;
+            console.error('API Error Data (object):', error.response.data);
+          } else if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data;
+            console.error('API Error Data (string):', error.response.data);
+          } else {
+            console.error('API Error Data (unknown format):', error.response.data);
+            errorMessage = `Server error (status ${error.response.status}). Check console for details.`;
+          }
+        } else {
+          errorMessage = `Server responded with status ${error.response.status} but no error data.`;
+        }
+      } else if (error.request) {
+        console.error('No response received from audio generation server:', error.request);
+        errorMessage = 'No response from audio server. It might be down, unreachable (check ngrok), or a CORS issue.';
+      } else {
+        console.error('Error setting up audio generation request:', error.message);
+        errorMessage = `Error setting up request: ${error.message}`;
+      }
+      throw new Error(errorMessage);
+    }
+  }
+
   extractTopic(content: string, type: string): string {
+    // Basic topic extraction, can be improved
     if (type === 'videolecture' && content.startsWith('mock://')) { 
         return content.replace('mock://', '').split(/[\s_]+/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Video Lecture';
     }

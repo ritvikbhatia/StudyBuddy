@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Maximize, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType } from 'lucide-react';
+import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Maximize, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType, Loader2, Volume2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
-import { StudyMaterial, Quiz, InputContent, User } from '../../types';
+import { StudyMaterial, Quiz, InputContent, User, Question as AppQuestionType, ActiveToolModalType } from '../../types';
 import { aiService } from '../../services/aiService';
 import { storageService } from '../../services/storageService';
 import { contentService, PwVideo } from '../../services/contentService';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { InitialStudyDataType } from '../../App';
-import { faker } from '@faker-js/faker'; // For generating chatId
+import { NavParamsType } from '../layout/Navbar';
+import { faker } from '@faker-js/faker';
 
 interface StudyMaterialResponseProps {
   data: {
@@ -25,7 +25,7 @@ interface StudyMaterialResponseProps {
   onBack: () => void;
   onNewStudy: () => void;
   isTopicView?: boolean;
-  onTabChange?: (tab: string, params?: InitialStudyDataType) => void;
+  onTabChange?: (tab: string, navParams?: NavParamsType) => void; 
 }
 
 const getYoutubeEmbedUrl = (url: string): string | null => {
@@ -50,11 +50,10 @@ const getYoutubeEmbedUrl = (url: string): string | null => {
   return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
 };
 
-type ActiveToolModal = 'flashcards' | 'mindmap' | 'summary' | 'quiz' | 'notes' | 'share' | null;
 
 export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ data, onBack, onNewStudy, isTopicView = false, onTabChange }) => {
   const { user } = useAuth();
-  const [activeToolModal, setActiveToolModal] = useState<ActiveToolModal>(null);
+  const [activeToolModal, setActiveToolModal] = useState<ActiveToolModalType>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   const [currentQuizQuestion, setCurrentQuizQuestion] = useState(0);
@@ -71,6 +70,9 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   const [currentNoteContent, setCurrentNoteContent] = useState('');
   const [shareableLink, setShareableLink] = useState('');
 
+  const [isFetchingAudio, setIsFetchingAudio] = useState(false);
+  const [audioPlayerSrc, setAudioPlayerSrc] = useState<string | null>(null);
+
   const chatContainerRef = useRef<HTMLDivElement>(null);
   
   const lang = data?.outputLanguage;
@@ -78,7 +80,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   
   const languageLabel = effectiveOutputLanguage.charAt(0).toUpperCase() + effectiveOutputLanguage.slice(1);
   
-  const [aiTutorChatId, setAiTutorChatId] = useState<string | null>(null); // For AI Tutor session
+  const [aiTutorChatId, setAiTutorChatId] = useState<string | null>(null); 
   const initialChatMessageText = isTopicView
     ? `Viewing materials for ${data.topic} (in ${languageLabel}). Ask me about this topic!`
     : `Hi! I'm your AI tutor for ${data.topic} (in ${languageLabel}). How can I help you learn better?`;
@@ -99,18 +101,15 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   }, [chatMessages]);
   
   useEffect(() => {
-    // Generate a new chatId for the AI Tutor session when the topic or user changes
-    const newChatId = user ? `user-${user.id}-${data.topic}-${Date.now()}` : `guest-${data.topic}-${Date.now()}`;
-    setAiTutorChatId(faker.string.uuid()); // Or a more structured ID like above
+    setAiTutorChatId(faker.string.uuid()); 
     
-    // Reset chat messages for new topic
      setChatMessages([{ id: 'initial-ai-message-reset', type: 'ai', content: 
         isTopicView 
         ? `Viewing materials for ${data.topic} (in ${languageLabel}). Ask me about this topic!`
         : `Hi! I'm your AI tutor for ${data.topic} (in ${languageLabel}). How can I help you learn better?`, 
      timestamp: new Date() }]);
 
-  }, [data.topic, user, isTopicView, languageLabel]); // Rerun if topic or user changes
+  }, [data.topic, user, isTopicView, languageLabel]); 
 
   useEffect(() => {
     if (data.originalInput.type !== 'youtube' && data.originalInput.type !== 'video' && data.originalInput.type !== 'videolecture') {
@@ -125,6 +124,15 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     }
     setLocalQuizData(data.quiz);
   }, [data.topic, data.originalInput.type, data.quiz]);
+
+  // Cleanup for audio object URL
+  useEffect(() => {
+    return () => {
+      if (audioPlayerSrc) {
+        URL.revokeObjectURL(audioPlayerSrc);
+      }
+    };
+  }, [audioPlayerSrc]);
 
   const handleQuizStart = (quizToStart: Quiz | null) => {
     if (!quizToStart) return;
@@ -161,7 +169,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       if (question.type === 'mcq') {
         if (userAnswer === question.correctAnswer) score += question.points;
       } else {
-        if (userAnswer && typeof userAnswer === 'string' && userAnswer.trim().length > 5) score += Math.floor(question.points * 0.7); // Simplified subjective scoring
+        if (userAnswer && typeof userAnswer === 'string' && userAnswer.trim().length > 5) score += Math.floor(question.points * 0.7); 
       }
     });
     setQuizScore(score);
@@ -183,8 +191,8 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     setChatInput('');
     setIsAITyping(true);
     try {
-      const summaryMaterial = data.materials.find(m => m.type === 'summary');
-      const context = summaryMaterial?.content || data.topic; // Use summary or topic as context
+      const summaryMaterialContent = data.materials.find(m => m.type === 'summary')?.content;
+      const context = typeof summaryMaterialContent === 'string' ? summaryMaterialContent : data.topic; 
       
       const aiResponseText = await aiService.getAIChatResponse(context, currentChatInput, aiTutorChatId);
       const aiMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: aiResponseText, timestamp: new Date() };
@@ -199,23 +207,72 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     }
   };
 
-  const openToolModal = async (tool: ActiveToolModal) => {
+  const handleListenToSummary = async () => {
+    const summary = data.materials.find(m => m.type === 'summary');
+    if (!summary || typeof summary.content !== 'string' || !summary.content.trim()) {
+      toast.error('No summary content available to listen to.');
+      return;
+    }
+    setIsFetchingAudio(true);
+    setActiveToolModal('listen-summary');
+    try {
+      const audioBlob = await aiService.generateAudioFromText(summary.content);
+      if (audioPlayerSrc) { // Revoke previous object URL if exists
+        URL.revokeObjectURL(audioPlayerSrc);
+      }
+      const newAudioSrc = URL.createObjectURL(audioBlob);
+      setAudioPlayerSrc(newAudioSrc);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to generate audio for summary.');
+      setActiveToolModal(null); // Close modal on error
+    } finally {
+      setIsFetchingAudio(false);
+    }
+  };
+
+  const handleCloseListenModal = () => {
+    setActiveToolModal(null);
+    if (audioPlayerSrc) {
+      URL.revokeObjectURL(audioPlayerSrc);
+      setAudioPlayerSrc(null);
+    }
+  };
+
+  const openToolModal = async (tool: ActiveToolModalType) => {
     if (tool === 'flashcards') {
       setCurrentFlashcardIndex(0);
       setIsFlashcardFlipped(false);
     }
     if (tool === 'quiz') {
-      if (localQuizData) {
+      if (localQuizData && localQuizData.questions.length > 0) {
         handleQuizStart(localQuizData);
       } else {
         setIsGeneratingQuiz(true);
         try {
-          const newQuiz = await aiService.generateQuiz(data.topic, 'medium', effectiveOutputLanguage);
-          setLocalQuizData(newQuiz);
-          handleQuizStart(newQuiz);
-          toast.success("Quiz generated!");
-        } catch (error) {
-          toast.error("Failed to generate quiz.");
+          const summaryMaterialContent = data.materials.find(m => m.type === 'summary')?.content;
+          const context = typeof summaryMaterialContent === 'string' ? summaryMaterialContent : data.topic; 
+          const questions: AppQuestionType[] = await aiService.generateLiveQuestionsAPI(context, 5, effectiveOutputLanguage);
+          if (questions.length > 0) {
+            const newQuiz: Quiz = {
+              id: `live-quiz-${Date.now()}`,
+              title: `${data.topic} Quiz (Generated)`,
+              topic: data.topic,
+              questions,
+              difficulty: 'medium',
+              timeLimit: questions.length * 90,
+              createdAt: new Date(),
+              language: effectiveOutputLanguage,
+            };
+            setLocalQuizData(newQuiz);
+            handleQuizStart(newQuiz);
+            toast.success("Quiz generated!");
+          } else {
+            toast.error("Could not generate quiz questions.");
+            setLocalQuizData(null); 
+          }
+        } catch (error: any) {
+          toast.error(error.message || "Failed to generate quiz.");
+          setLocalQuizData(null);
         } finally {
           setIsGeneratingQuiz(false);
         }
@@ -228,6 +285,10 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     if (tool === 'share') {
       const link = `${window.location.origin}/study?topic=${encodeURIComponent(data.topic)}&lang=${effectiveOutputLanguage}`;
       setShareableLink(link);
+    }
+    if (tool === 'listen-summary') {
+      handleListenToSummary(); // This will open the modal internally on success
+      return; // Prevent setting activeToolModal directly here
     }
     setActiveToolModal(tool);
   };
@@ -250,7 +311,9 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
 
   const handleBattleButtonClick = () => {
     if (onTabChange) {
-      onTabChange('battle', { inputType: 'text', content: data.topic, topic: data.topic });
+      const summaryMaterialContent = data.materials.find(m => m.type === 'summary')?.content;
+      const context = typeof summaryMaterialContent === 'string' ? summaryMaterialContent : data.topic; 
+      onTabChange('battle', { battleParams: { topic: data.topic, context } });
     } else {
       toast("Navigation to Battle page is not available in this context.");
     }
@@ -284,7 +347,6 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
         );
       case 'document':
         if (metadata?.documentType === 'pdf' && content) {
-          // Basic check for common PDF hosting patterns that might block iframe
           const isLikelyBlocked = content.includes('drive.google.com') && !content.includes('/preview');
           if (isLikelyBlocked) {
              return <div className="bg-gray-200 p-4 rounded-lg h-full flex flex-col items-center justify-center"><FileType size={48} className="mb-2 text-gray-500" /><p className="font-semibold">{metadata?.fileName || 'PDF Document'}</p><p className="text-sm text-red-600 text-center">Direct embedding for this PDF might be restricted. <a href={content} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Open PDF in new tab</a>.</p></div>;
@@ -314,12 +376,13 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   };
 
   const interactiveTools = [
-    { id: 'flashcards' as ActiveToolModal, label: 'Flashcards', icon: CheckSquare, disabled: !flashcardMaterial },
-    { id: 'mindmap' as ActiveToolModal, label: 'Mind Map', icon: Brain, disabled: !mindMapMaterial },
-    { id: 'summary' as ActiveToolModal, label: 'Summary', icon: FileTextIcon, disabled: !summaryMaterial },
-    { id: 'quiz' as ActiveToolModal, label: 'Quiz', icon: Trophy, disabled: isGeneratingQuiz },
-    { id: 'notes' as ActiveToolModal, label: 'Notes', icon: Edit3, disabled: !user },
-    { id: 'battle' as ActiveToolModal, label: 'Battle', icon: Swords, disabled: !onTabChange },
+    { id: 'flashcards' as ActiveToolModalType, label: 'Flashcards', icon: CheckSquare, disabled: !flashcardMaterial },
+    { id: 'mindmap' as ActiveToolModalType, label: 'Mind Map', icon: Brain, disabled: !mindMapMaterial },
+    { id: 'summary' as ActiveToolModalType, label: 'Read Summary', icon: FileTextIcon, disabled: !summaryMaterial },
+    { id: 'listen-summary' as ActiveToolModalType, label: 'Listen Summary', icon: Volume2, disabled: !summaryMaterial || isFetchingAudio },
+    { id: 'quiz' as ActiveToolModalType, label: 'Quiz', icon: Trophy, disabled: isGeneratingQuiz },
+    { id: 'notes' as ActiveToolModalType, label: 'Notes', icon: Edit3, disabled: !user },
+    { id: 'battle' as ActiveToolModalType, label: 'Battle', icon: Swords, disabled: !onTabChange || !summaryMaterial }, 
   ];
 
   return (
@@ -351,7 +414,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
           </Card>
           <Card className="p-4 flex-shrink-0 interactive-tools-card">
             <h3 className="text-md font-semibold text-gray-800 mb-3">Interactive Tools</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {interactiveTools.map(tool => {
                 const Icon = tool.icon;
                 return (
@@ -362,7 +425,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
                     onClick={() => tool.id === 'battle' ? handleBattleButtonClick() : openToolModal(tool.id)} 
                     disabled={tool.disabled} 
                     className="flex flex-col items-center justify-center h-20 sm:h-24 text-xs sm:text-sm"
-                    loading={tool.id === 'quiz' && isGeneratingQuiz}
+                    loading={(tool.id === 'quiz' && isGeneratingQuiz) || (tool.id === 'listen-summary' && isFetchingAudio)}
                   >
                     <Icon size={20} className="mb-1" /> {tool.label}
                   </Button>
@@ -474,7 +537,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       </Modal>
 
       <Modal key="mindmap-modal" isOpen={activeToolModal === 'mindmap'} onClose={() => setActiveToolModal(null)} title="Mind Map">
-        {mindMapMaterial && mindMapMaterial.content.central ? (
+        {mindMapMaterial && mindMapMaterial.content.central ? ( // Mock data structure
           <div className="text-center">
             <div className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold mb-6 inline-block text-xl shadow-md">{mindMapMaterial.content.central}</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -490,7 +553,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
               ))}
             </div>
           </div>
-        ) : mindMapMaterial && mindMapMaterial.content.id ? ( 
+        ) : mindMapMaterial && mindMapMaterial.content.id ? ( // API data structure
           <div className="text-center">
             <div className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold mb-6 inline-block text-xl shadow-md">{mindMapMaterial.content.title}</div>
             {mindMapMaterial.content.children && mindMapMaterial.content.children.length > 0 && (
@@ -516,14 +579,31 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       <Modal key="summary-modal" isOpen={activeToolModal === 'summary'} onClose={() => setActiveToolModal(null)} title="Summary">
         {summaryMaterial ? (
           <div className="prose prose-sm max-w-none max-h-[60vh] overflow-y-auto p-1">
-            <pre className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">{summaryMaterial.content}</pre>
+            <pre className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">{typeof summaryMaterial.content === 'string' ? summaryMaterial.content : JSON.stringify(summaryMaterial.content, null, 2)}</pre>
           </div>
         ) : <p>Summary not available for this topic.</p>}
+      </Modal>
+      
+      <Modal key="listen-summary-modal" isOpen={activeToolModal === 'listen-summary'} onClose={handleCloseListenModal} title="Listen to Summary">
+        {isFetchingAudio ? (
+          <div className="text-center py-10">
+            <Loader2 size={32} className="mx-auto animate-spin text-blue-500 mb-2" />
+            <p className="text-gray-600">Generating audio...</p>
+          </div>
+        ) : audioPlayerSrc ? (
+          <div className="flex flex-col items-center justify-center p-4">
+            <audio controls autoPlay src={audioPlayerSrc} className="w-full max-w-md">
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        ) : (
+          <p className="text-center text-gray-500 py-10">Audio could not be loaded. Please try again.</p>
+        )}
       </Modal>
 
       <Modal key="quiz-modal" isOpen={activeToolModal === 'quiz'} onClose={() => setActiveToolModal(null)} title="Interactive Quiz">
         {isGeneratingQuiz ? (
-          <div className="text-center py-10"><Brain size={32} className="mx-auto animate-pulse text-blue-500 mb-2" /> Generating quiz...</div>
+          <div className="text-center py-10"><Loader2 size={32} className="mx-auto animate-spin text-blue-500 mb-2" /> Generating quiz...</div>
         ) : localQuizData && quizStarted ? (
           quizCompleted ? (
             <div className="text-center space-y-4">
@@ -549,7 +629,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
                 <textarea value={quizAnswers[localQuizData.questions[currentQuizQuestion].id] || ''} onChange={(e) => handleQuizAnswer(localQuizData.questions[currentQuizQuestion].id, e.target.value)} placeholder="Your answer..." className="w-full h-24 p-2 border rounded-lg" />
               )}
               <div className="flex justify-end">
-                <Button onClick={handleNextQuestion} disabled={quizAnswers[localQuizData.questions[currentQuizQuestion].id] === undefined}>
+                <Button onClick={handleNextQuestion} disabled={quizAnswers[localQuizData.questions[currentQuizQuestion].id] === undefined && localQuizData.questions[currentQuizQuestion].type === 'mcq'}>
                   {currentQuizQuestion === localQuizData.questions.length - 1 ? 'Finish Quiz' : 'Next Question'}
                 </Button>
               </div>
