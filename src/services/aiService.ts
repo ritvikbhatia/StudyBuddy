@@ -462,7 +462,7 @@ ${getMockText(language, 'paragraph', topic, 2)}`;
 
   // New method for generating audio from text
   async generateAudioFromText(text: string): Promise<Blob> {
-    const apiUrl = 'https://abf8-223-181-126-21.ngrok-free.app/generate-audio-from-text';
+    const apiUrl = 'https://1971-2401-4900-88d3-b74d-accd-35-1646-5576.ngrok-free.app/generate-audio-from-text';
     const payload = { text };
 
     try {
