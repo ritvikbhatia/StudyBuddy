@@ -250,7 +250,7 @@ export const BattlePage: React.FC<BattlePageProps> = ({ battleParams }) => {
                     onClick={() => startMatching(opt.topic, opt.difficulty)} // Quick battles use default context
                     disabled={isPreparingBattle}
                   >
-                    <span className="text-lg font-semibold">{opt.topic}</span>
+
                     <span className={`text-sm capitalize px-2 py-0.5 rounded-full mt-1 ${
                       opt.difficulty === 'easy' ? 'bg-green-100 text-green-700' : 
                       opt.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700' : 
@@ -423,7 +423,7 @@ export const BattlePage: React.FC<BattlePageProps> = ({ battleParams }) => {
               </div>
             </div>
             {battleWinner === 'user' && <p className="text-lg text-yellow-600">You earned {battleDifficulty === 'easy' ? 50 : battleDifficulty === 'medium' ? 100 : 150} points!</p>}
-            <Button onClick={() => setBattleState('idle')} size="lg" className="mt-6">
+            <Button onClick={() => setBattleState('idle')} size="lg" className="mt-6 self-center">
               Play Again <ChevronRight size={20} className="ml-1"/>
             </Button>
           </motion.div>
