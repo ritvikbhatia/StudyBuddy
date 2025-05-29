@@ -1,17 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, BookOpen, Trophy, Users, Clock, Target, Zap, Award, Calendar, ArrowRight, Youtube as YoutubeIcon, PlayCircle } from 'lucide-react';
+import { TrendingUp, BookOpen, Trophy, Users, Clock, Target, Zap, Award, Calendar, ArrowRight, Youtube as YoutubeIcon, PlayCircle, RadioTower } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { storageService } from '../../services/storageService';
-import { contentService, PwVideo } from '../../services/contentService';
-import { InitialStudyDataType } from '../../App';
-import { useTranslation } from '../../hooks/useTranslation'; // New import
+import { NavParamsType } from '../layout/Navbar'; // Import NavParamsType
+import { useTranslation } from '../../hooks/useTranslation';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 
 interface DashboardProps {
-  onTabChange: (tab: string, studyParams?: InitialStudyDataType) => void;
+  onTabChange: (tab: string, navParams?: NavParamsType) => void; // Use NavParamsType
 }
+
+interface ChannelThumbnail {
+  url: string;
+  width: number;
+  height: number;
+}
+
+interface ChannelThumbnails {
+  default: ChannelThumbnail;
+  medium: ChannelThumbnail;
+  high: ChannelThumbnail;
+}
+
+interface ChannelData {
+  id: number; // Assuming API returns number, but channel_id is string for YouTube
+  channel_id: string; // This is the actual YouTube channel ID
+  channel_description: string;
+  custom_url: string;
+  channel_thumbnails: ChannelThumbnails;
+  channel_name: string;
+}
+
 
 export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
   const { t } = useTranslation();
@@ -20,12 +43,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
   const [trendingTopics, setTrendingTopics] = useState<string[]>([]);
   const [todayStudyTime, setTodayStudyTime] = useState(0);
   const [weeklyStudyTime, setWeeklyStudyTime] = useState(0);
-  const [pwRecommendations, setPwRecommendations] = useState<PwVideo[]>([]);
+  
+  const [recommendedChannels, setRecommendedChannels] = useState<ChannelData[]>([]);
+  const [loadingChannels, setLoadingChannels] = useState<boolean>(true);
 
   useEffect(() => {
     loadDashboardData();
-    const videos = contentService.getAllPwVideos();
-    setPwRecommendations(videos.slice(0, 4));
+    fetchRecommendedChannels();
   }, [user]); 
 
   const loadDashboardData = () => {
@@ -40,12 +64,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
     setWeeklyStudyTime(weeklyTime);
   };
 
-  const handlePwVideoClick = (video: PwVideo) => {
-    onTabChange('study', {
-      inputType: 'youtube',
-      inputSubType: 'pw-recommendations',
-      content: video.title,
-      topic: video.title,
+  const fetchRecommendedChannels = async () => {
+    setLoadingChannels(true);
+    try {
+      const response = await axios.get('https://qbg-backend-stage.penpencil.co/qbg/youtube-videos/channels?page=1&limit=4');
+      if (response.data && response.data.status_code === 200 && response.data.data) {
+        setRecommendedChannels(response.data.data);
+      } else {
+        toast.error('Failed to fetch recommended channels.');
+        console.error('API error fetching channels:', response.data);
+      }
+    } catch (error) {
+      toast.error('Error fetching recommended channels.');
+      console.error('Network error fetching channels:', error);
+    } finally {
+      setLoadingChannels(false);
+    }
+  };
+
+  const handleChannelClick = (channel: ChannelData) => {
+    onTabChange('dashboard', { // Keep current tab or choose a neutral one, App.tsx will handle view
+      channelId: channel.channel_id, // Use channel_id from API
+      channelName: channel.channel_name,
     });
   };
 
@@ -69,7 +109,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
     {
       labelKey: 'dashboard.level',
       value: user?.level || 1,
-      unitKey: '', // No unit for level
+      unitKey: '', 
       icon: Award,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100',
@@ -93,7 +133,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
 
     if (diffHours > 24) {
       const diffDays = Math.floor(diffHours / 24);
-      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`; // This part could also be translated if needed
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
     } else if (diffHours > 0) {
       return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
     } else if (diffMinutes > 0) {
@@ -162,49 +202,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
         })}
       </div>
 
-      {/* PW Video Recommendations */}
-      {pwRecommendations.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Card className="p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-              <YoutubeIcon className="mr-2 text-red-600" size={24} />
-              Physics Wallah - Recommended Videos {/* This could be translated too */}
-            </h3>
+      {/* Recommended Channels */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+      >
+        <Card className="p-6">
+          <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+            <RadioTower className="mr-2 text-red-600" size={24} />
+            Recommended Channels
+          </h3>
+          {loadingChannels ? (
+            <div className="text-center py-8 text-gray-500">Loading channels...</div>
+          ) : recommendedChannels.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {pwRecommendations.map((video) => (
+              {recommendedChannels.map((channel) => (
                 <Card 
-                  key={video.id} 
+                  key={channel.id} 
                   hover 
-                  onClick={() => handlePwVideoClick(video)}
-                  className="p-3 cursor-pointer flex flex-col"
+                  onClick={() => handleChannelClick(channel)}
+                  className="p-3 cursor-pointer flex flex-col items-center text-center"
                 >
-                  <div className="relative">
-                    <img src={video.thumbnailUrl} alt={video.title} className="w-full h-32 object-cover rounded-md mb-2"/>
-                    {video.duration && (
-                      <span className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1.5 py-0.5 rounded">
-                        {video.duration}
-                      </span>
-                    )}
-                  </div>
-                  <h5 className="font-semibold text-sm text-gray-900 truncate mb-1 flex-grow" title={video.title}>{video.title}</h5>
-                  <p className="text-xs text-gray-500 truncate">{video.channel}</p>
-                  <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
-                    <span>{video.views}</span>
-                    <span>{video.uploadDate}</span>
-                  </div>
-                  <Button size="sm" variant="ghost" className="w-full mt-2 text-blue-600 hover:bg-blue-50">
-                    <PlayCircle size={14} className="mr-1.5" /> Study this video
+                  <img 
+                    src={channel.channel_thumbnails.medium.url} 
+                    alt={channel.channel_name} 
+                    className="w-24 h-24 object-cover rounded-full mb-3 border-2 border-gray-200 shadow-sm"
+                  />
+                  <h5 className="font-semibold text-sm text-gray-900 truncate w-full mb-1" title={channel.channel_name}>
+                    {channel.channel_name}
+                  </h5>
+                  <p className="text-xs text-blue-600 truncate w-full">{channel.custom_url}</p>
+                  <Button size="sm" variant="ghost" className="w-full mt-2 text-blue-600 hover:bg-blue-50 text-xs">
+                    <YoutubeIcon size={14} className="mr-1.5" /> View Channel
                   </Button>
                 </Card>
               ))}
             </div>
-          </Card>
-        </motion.div>
-      )}
+          ) : (
+            <div className="text-center py-8 text-gray-500">No channels to recommend at the moment.</div>
+          )}
+        </Card>
+      </motion.div>
 
 
       <div className="grid lg:grid-cols-2 gap-8">
@@ -216,7 +255,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
           <Card className="p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
               <TrendingUp className="mr-2 text-blue-600" size={24} />
-              Recent Activity {/* Translate if needed */}
+              Recent Activity
             </h3>
             {recentActivity.length > 0 ? (
               <div className="space-y-4">
@@ -256,7 +295,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
           <Card className="p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
               <BookOpen className="mr-2 text-green-600" size={24} />
-              Your Study Topics {/* Translate if needed */}
+              Your Study Topics
             </h3>
             {trendingTopics.length > 0 ? (
               <div className="space-y-3">
@@ -293,7 +332,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.7 }}
       >
-        <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3> {/* Translate if needed */}
+        <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
         <div className="grid md:grid-cols-3 gap-6">
           <div className="h-full">
             <Card hover onClick={() => onTabChange('study')} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
@@ -309,7 +348,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
             </Card>
           </div>
           <div className="h-full">
-            <Card hover onClick={() => onTabChange('study', { inputType: 'text', content: '', topic: 'General Knowledge Quiz' })} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
+            <Card hover onClick={() => onTabChange('study', { studyParams: { inputType: 'text', content: '', topic: 'General Knowledge Quiz' }})} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
               <div>
                 <Trophy className="mx-auto mb-4 text-yellow-600" size={48} />
                 <h4 className="font-bold text-gray-900 mb-2">Take Quiz</h4>

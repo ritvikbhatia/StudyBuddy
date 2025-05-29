@@ -8,7 +8,7 @@ import { storageService } from '../../services/storageService';
 import { aiService } from '../../services/aiService';
 import { faker } from '@faker-js/faker';
 import toast from 'react-hot-toast';
-import { Quiz, Question as QuizQuestionType } from '../../types'; // Renamed to avoid conflict
+import { Quiz, Question as QuizQuestionType } from '../../types';
 
 interface Opponent {
   id: string;
@@ -32,7 +32,7 @@ export const BattlePage: React.FC = () => {
   const [battleWinner, setBattleWinner] = useState<'user' | 'opponent' | 'draw' | null>(null);
   const [battleTopic, setBattleTopic] = useState<string>('General Knowledge');
   const [battleDifficulty, setBattleDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
-  const [answerSubmittedThisTurn, setAnswerSubmittedThisTurn] = useState<boolean>(false); // New state
+  const [answerSubmittedThisTurn, setAnswerSubmittedThisTurn] = useState<boolean>(false);
 
   const [battleHistory, setBattleHistory] = useState<any[]>([]);
    useEffect(() => {
@@ -55,7 +55,7 @@ export const BattlePage: React.FC = () => {
     setCurrentQuestionIndex(0);
     setBattleWinner(null);
     setUserAnswer(null);
-    setAnswerSubmittedThisTurn(false); // Reset
+    setAnswerSubmittedThisTurn(false); 
 
     await new Promise(resolve => setTimeout(resolve, 2500)); 
     const newOpponent: Opponent = {
@@ -67,16 +67,31 @@ export const BattlePage: React.FC = () => {
     setOpponent(newOpponent);
 
     try {
-      const quiz = await aiService.generateQuiz(topic, difficulty);
-      if (quiz.questions.length < 5) {
-        const additionalQuestions = await aiService.generateQuiz(topic, difficulty); // Regenerate for more questions
-        quiz.questions = [...quiz.questions, ...additionalQuestions.questions.slice(0, 5 - quiz.questions.length)];
+      const quiz = await aiService.generateQuiz(topic, difficulty, 'english'); // Battle quizzes are in English for now
+      
+      // Ensure we have exactly 5 questions for a battle
+      let finalQuestions = quiz.questions;
+      if (finalQuestions.length < 5) {
+        const additionalQuestionsData = await aiService.generateQuiz(topic, difficulty, 'english');
+        finalQuestions = [...finalQuestions, ...additionalQuestionsData.questions].slice(0,5);
+      } else if (finalQuestions.length > 5) {
+        finalQuestions = finalQuestions.slice(0, 5);
       }
-      quiz.questions = quiz.questions.slice(0,5);
-      setBattleQuiz(quiz);
+      // If still less than 5 (e.g. AI service consistently returns few), duplicate last one or handle error
+      while (finalQuestions.length < 5 && finalQuestions.length > 0) {
+        finalQuestions.push({...finalQuestions[finalQuestions.length-1], id: faker.string.uuid()});
+      }
+      if (finalQuestions.length < 5) {
+          toast.error("Could not generate enough questions for the battle. Please try another topic or difficulty.");
+          setBattleState('idle');
+          return;
+      }
+
+      setBattleQuiz({...quiz, questions: finalQuestions});
       await new Promise(resolve => setTimeout(resolve, 1500)); 
       setBattleState('battling');
     } catch (error) {
+      console.error("Battle Quiz Generation Error:", error);
       toast.error("Failed to prepare battle quiz. Please try again.");
       setBattleState('idle');
     }
@@ -86,9 +101,6 @@ export const BattlePage: React.FC = () => {
     if (!battleQuiz || !user || answerSubmittedThisTurn || isOpponentAnswering) return;
 
     setAnswerSubmittedThisTurn(true);
-    // userAnswer for MCQs is set in onClick for immediate visual feedback
-    // For subjective, userAnswer already holds the text from the textarea
-
     setIsOpponentAnswering(true);
 
     const question = battleQuiz.questions[currentQuestionIndex];
@@ -111,7 +123,7 @@ export const BattlePage: React.FC = () => {
     if (currentQuestionIndex < battleQuiz.questions.length - 1) {
       setCurrentQuestionIndex(idx => idx + 1);
       setUserAnswer(null); 
-      setAnswerSubmittedThisTurn(false); // Reset for next question
+      setAnswerSubmittedThisTurn(false); 
     } else {
       let winner: 'user' | 'opponent' | 'draw';
       if (userScore > opponentScore) winner = 'user';
@@ -143,22 +155,21 @@ export const BattlePage: React.FC = () => {
         topic: battleTopic,
         difficulty: battleDifficulty,
       });
-      // Reset for a potential new game from results page
       setUserAnswer(null);
       setAnswerSubmittedThisTurn(false);
     }
   };
   
   const quickBattleOptions = [
-    { topic: "General Knowledge", difficulty: "medium" as const },
-    { topic: "Science Trivia", difficulty: "easy" as const },
+    { topic: "General Knowledge", difficulty: "easy" as const },
+    { topic: "Science Trivia", difficulty: "medium" as const },
     { topic: "History Facts", difficulty: "hard" as const },
   ];
 
   const currentQuestionData = battleQuiz?.questions[currentQuestionIndex];
 
   const userStats = {
-    battlesWon: battleHistory.filter(b => b.result === 'user' && b.userId === user?.id).length, // Changed 'won' to 'user'
+    battlesWon: battleHistory.filter(b => b.result === 'user' && b.userId === user?.id).length,
     battlesPlayed: battleHistory.filter(b => b.userId === user?.id).length,
     totalRewards: battleHistory.filter(b => b.userId === user?.id).reduce((sum, b) => sum + (b.reward || 0), 0),
     winRate: 0,
@@ -220,7 +231,6 @@ export const BattlePage: React.FC = () => {
                     className="flex flex-col h-auto py-4"
                     onClick={() => startMatching(opt.topic, opt.difficulty)}
                   >
-                    <span className="text-lg font-semibold">{opt.topic}</span>
                     <span className={`text-sm capitalize px-2 py-0.5 rounded-full mt-1 ${
                       opt.difficulty === 'easy' ? 'bg-green-100 text-green-700' : 
                       opt.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700' : 

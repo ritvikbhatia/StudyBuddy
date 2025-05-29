@@ -1,50 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Youtube as YoutubeIcon, MessageSquare, Send, ChevronLeft, ChevronRight, Lightbulb, Bot, User as UserIcon, Play, Pause, Volume2, Maximize, Menu, PlayCircle as PlayCircleIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Youtube as YoutubeIcon, MessageSquare, Send, ChevronRight, Bot, User as UserIcon, Play, Pause, Loader2, AlertTriangle, PlayCircle as PlayCircleIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { InteractivePanel, LeaderboardEntry } from './InteractivePanel';
+import { InteractivePanel, LeaderboardEntry, MCQ } from './InteractivePanel';
 import { faker } from '@faker-js/faker';
-import { contentService, PwVideo } from '../../services/contentService'; // Import PwVideo and contentService
+import { contentService, PwVideo } from '../../services/contentService';
+import axios from 'axios';
+import { ApiTranscriptItem, LiveTranscriptionApiResponse } from '../../types';
 
-const YOUTUBE_VIDEO_ID = 'sqdwl8nfUXA';
-
-export interface TranscriptSegment {
-  id: number;
-  startTime: number; 
-  text: string;
-}
-
-export const mockTranscript: TranscriptSegment[] = [
-  { id: 1, startTime: 0, text: "Welcome to today's live class on Advanced React Patterns!" },
-  { id: 2, startTime: 5, text: "We'll be covering hooks, context API, and performance optimization." },
-  { id: 3, startTime: 10, text: "First, let's dive into custom hooks. They allow you to extract component logic into reusable functions." },
-  { id: 4, startTime: 18, text: "Consider a scenario where you need to fetch data in multiple components." },
-  { id: 5, startTime: 25, text: "Instead of repeating the fetching logic, you can create a `useFetch` custom hook." },
-  { id: 6, startTime: 32, text: "This hook can handle loading states, error handling, and data memoization." },
-  { id: 7, startTime: 40, text: "Let's look at an example. Here, `useFetch` takes a URL and returns data, loading, and error states." },
-  { id: 8, startTime: 50, text: "Now, let's discuss the Context API. It provides a way to pass data through the component tree without having to pass props down manually at every level." },
-  { id: 9, startTime: 60, text: "This is particularly useful for global data like themes, user authentication, or language preferences." },
-  { id: 10, startTime: 70, text: "To use Context, you first create a Context object using `React.createContext`." },
-  { id: 11, startTime: 80, text: "Then, you use a Provider component to make the context value available to all descendants." },
-  { id: 12, startTime: 90, text: "And finally, consumer components can subscribe to this context using `useContext` hook or a Consumer component." },
-  { id: 13, startTime: 100, text: "Remember, while Context is powerful, it can make component reuse more difficult, so use it judiciously." },
-  { id: 14, startTime: 110, text: "Moving on to performance optimization, memoization is key. React.memo and useMemo are your friends." },
-  { id: 15, startTime: 120, text: "Virtualization for long lists can also significantly improve rendering performance." },
-  { id: 16, startTime: 130, text: "Code splitting helps reduce initial load time by only loading the JavaScript needed for the current view." },
-  { id: 17, startTime: 140, text: "Always profile your application using React DevTools to identify bottlenecks." },
-  { id: 18, startTime: 150, text: "That concludes our main topics for today. We'll now open the floor for Q&A." },
-];
-
-export interface MCQ {
-  id: number;
-  question: string;
-  options: string[];
-  correctAnswerIndex: number;
-  explanation: string;
-}
+const YOUTUBE_VIDEO_ID = 'NnhYrcHA3tA';
+const LIVE_STREAM_KEY_FOR_TRANSCRIPTS = 'live_stream_key';
 
 export const liveClassMockMcqs: MCQ[] = [
   {
@@ -68,15 +36,7 @@ export const liveClassMockMcqs: MCQ[] = [
     correctAnswerIndex: 1,
     explanation: "`React.memo` is a higher-order component that memoizes your component, skipping re-renders if props haven't changed."
   },
-  {
-    id: 4,
-    question: "What is code splitting in React?",
-    options: ["Splitting CSS into multiple files", "Splitting JavaScript bundles to load parts on demand", "Splitting components into smaller ones", "A way to manage state"],
-    correctAnswerIndex: 1,
-    explanation: "Code splitting helps reduce initial load time by loading only the JavaScript needed for the current view, improving performance."
-  },
 ];
-
 
 interface ChatMessage {
   id: string;
@@ -101,11 +61,37 @@ export const LiveClassesPage: React.FC = () => {
   const [newQuestionIndicator, setNewQuestionIndicator] = useState(false);
   const [userQuizScore, setUserQuizScore] = useState(0);
 
-  const [recommendedVideos, setRecommendedVideos] = useState<PwVideo[]>([]); // New state for recommended videos
+  const [recommendedVideos, setRecommendedVideos] = useState<PwVideo[]>([]);
+  
+  const [liveTranscripts, setLiveTranscripts] = useState<ApiTranscriptItem[]>([]);
+  const [loadingTranscripts, setLoadingTranscripts] = useState<boolean>(true);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
 
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
   const videoPlayerRef = useRef<HTMLDivElement>(null);
+  const transcriptPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  const fetchTranscripts = async () => {
+    if (liveTranscripts.length === 0 && !transcriptError) setLoadingTranscripts(true); // Show initial loading only if no error previously
+    // Do not reset transcriptError here, so it persists until a successful fetch
+    try {
+      const response = await axios.get<LiveTranscriptionApiResponse>(`https://qbg-backend-stage.penpencil.co/qbg/internal/get-transcripts?stream_id=${LIVE_STREAM_KEY_FOR_TRANSCRIPTS}`);
+      if (response.data && response.data.status_code === 200 && response.data.data) {
+        setLiveTranscripts(response.data.data.transcripts);
+        setTranscriptError(null); // Clear error on successful fetch
+      } else {
+        // Only set error if it's not already set, to avoid flickering
+        if (!transcriptError) setTranscriptError('Failed to update transcripts.');
+        console.error('API error fetching transcripts:', response.data);
+      }
+    } catch (err) {
+      console.error('Network error fetching transcripts:', err);
+      if (!transcriptError) setTranscriptError('Could not load live transcripts. Retrying...');
+    } finally {
+      setLoadingTranscripts(false); // Always set loading to false after an attempt
+    }
+  };
+  
   useEffect(() => {
     const mockLeaderboard: LeaderboardEntry[] = Array.from({ length: 10 }).map((_, i) => ({
       id: faker.string.uuid(),
@@ -116,10 +102,17 @@ export const LiveClassesPage: React.FC = () => {
       avgTime: parseFloat(faker.number.float({ min: 5, max: 25, precision: 0.1 }).toFixed(1)),
     })).sort((a, b) => b.score - a.score);
     setLeaderboardData(mockLeaderboard);
+    setRecommendedVideos(contentService.getAllPwVideos().slice(0, 3));
 
-    // Fetch recommended videos
-    setRecommendedVideos(contentService.getAllPwVideos().slice(0, 3)); // Get first 3 for example
-  }, []);
+    fetchTranscripts(); // Initial fetch
+    transcriptPollIntervalRef.current = setInterval(fetchTranscripts, 5000); // Poll every 5 seconds
+
+    return () => {
+      if (transcriptPollIntervalRef.current) {
+        clearInterval(transcriptPollIntervalRef.current);
+      }
+    };
+  }, []); // Empty dependency array means this runs once on mount and cleans up on unmount
 
   useEffect(() => {
     let videoTimerId: NodeJS.Timeout;
@@ -216,9 +209,7 @@ export const LiveClassesPage: React.FC = () => {
   };
 
   const handleRecommendedVideoClick = (video: PwVideo) => {
-    toast.success(`Navigating to study: ${video.title}`);
-    // Here you would typically call onTabChange or a similar navigation function
-    // For example: onTabChange('study', { inputType: 'youtube', content: video.youtubeUrl, topic: video.title });
+    toast(`Navigating to study: ${video.title}`);
   };
 
   return (
@@ -256,6 +247,9 @@ export const LiveClassesPage: React.FC = () => {
           <div className="flex-grow">
             <InteractivePanel
               currentSimulatedTime={currentTimeInSeconds}
+              liveTranscripts={liveTranscripts}
+              loadingTranscripts={loadingTranscripts}
+              transcriptError={transcriptError}
               currentMCQ={currentLiveMCQ}
               mcqTimer={liveMCQTimer}
               leaderboardData={leaderboardData}
@@ -271,105 +265,103 @@ export const LiveClassesPage: React.FC = () => {
                          : 'hidden lg:block'}`} 
              onClick={() => { if (window.innerWidth < 1024) setIsChatOpen(false);}}>
           <motion.div 
-            className={`h-full w-full max-w-md ml-auto lg:max-w-none bg-white shadow-xl lg:shadow-none lg:rounded-none flex flex-col overflow-y-auto space-y-6
+            className={`h-full w-full max-w-md ml-auto lg:max-w-none bg-white shadow-xl lg:shadow-none lg:rounded-none flex flex-col overflow-y-auto
                        ${isChatOpen ? 'rounded-l-xl' : 'lg:rounded-xl'}`}
             initial={window.innerWidth < 1024 ? { x: "100%" } : { opacity: 0 }}
             animate={window.innerWidth < 1024 ? { x: isChatOpen ? "0%" : "100%" } : { opacity: 1 }}
             exit={window.innerWidth < 1024 ? { x: "100%" } : { opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
+            style={{ 
+              height: videoPlayerRef.current && window.innerWidth >=1024 
+                ? `${videoPlayerRef.current.offsetHeight + (document.querySelector('.interactive-panel-actual-height')?.clientHeight || 400) + 24}px`
+                : 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 4rem)'
+            }}
           >
-            {/* AI Doubt Solver - Height matches video card */}
-            <div 
-              style={{ 
-                height: videoPlayerRef.current ? `${videoPlayerRef.current.offsetHeight}px` : '400px'
-              }}
-            >
-              <Card className="p-0 flex flex-col h-full">
-                <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-                  <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                    <Bot size={20} className="mr-2 text-blue-600" /> AI Doubt Solver
-                  </h2>
-                  <Button variant="ghost" size="sm" onClick={() => setIsChatOpen(false)} className="lg:hidden p-1">
-                    <ChevronRight size={20} />
+            <Card className="p-0 flex flex-col flex-grow">
+              <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+                <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                  <Bot size={20} className="mr-2 text-blue-600" /> AI Doubt Solver
+                </h2>
+                <Button variant="ghost" size="sm" onClick={() => setIsChatOpen(false)} className="lg:hidden p-1">
+                  <ChevronRight size={20} />
+                </Button>
+              </div>
+              <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                {chatMessages.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] px-3 py-2 rounded-lg shadow-sm text-sm ${msg.type === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border'}`}>
+                      <div className="flex items-start space-x-1.5">
+                        {msg.type === 'ai' && <Bot size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />}
+                        <p>{msg.text}</p>
+                        {msg.type === 'user' && <UserIcon size={14} className="text-blue-200 mt-0.5 flex-shrink-0" />}
+                      </div>
+                      <p className={`text-xs mt-1 ${msg.type === 'user' ? 'text-blue-200 text-right' : 'text-gray-500'}`}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                ))}
+                {isAiTyping && (
+                    <div className="flex justify-start">
+                        <div className="bg-white text-gray-800 border px-3 py-2 rounded-lg shadow-sm">
+                            <div className="flex items-center space-x-1.5">
+                                <Bot size={14} className="text-blue-500" />
+                                <div className="flex space-x-1">
+                                    {[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: `${i*0.1}s`}}></div>)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+              </div>
+              <div className="p-4 border-t sticky bottom-0 bg-white z-10">
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
+                    placeholder={user ? "Ask a question..." : "Login to chat"}
+                    className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    disabled={!user}
+                  />
+                  <Button onClick={handleChatSend} size="md" disabled={!user || !chatInput.trim()}>
+                    <Send size={16} />
                   </Button>
                 </div>
-                <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                  {chatMessages.map(msg => (
-                    <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] px-3 py-2 rounded-lg shadow-sm text-sm ${msg.type === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border'}`}>
-                        <div className="flex items-start space-x-1.5">
-                          {msg.type === 'ai' && <Bot size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />}
-                          <p>{msg.text}</p>
-                          {msg.type === 'user' && <UserIcon size={14} className="text-blue-200 mt-0.5 flex-shrink-0" />}
-                        </div>
-                        <p className={`text-xs mt-1 ${msg.type === 'user' ? 'text-blue-200 text-right' : 'text-gray-500'}`}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {isAiTyping && (
-                      <div className="flex justify-start">
-                          <div className="bg-white text-gray-800 border px-3 py-2 rounded-lg shadow-sm">
-                              <div className="flex items-center space-x-1.5">
-                                  <Bot size={14} className="text-blue-500" />
-                                  <div className="flex space-x-1">
-                                      {[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: `${i*0.1}s`}}></div>)}
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-                  )}
-                </div>
-                <div className="p-4 border-t sticky bottom-0 bg-white z-10">
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
-                      placeholder={user ? "Ask a question..." : "Login to chat"}
-                      className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      disabled={!user}
-                    />
-                    <Button onClick={handleChatSend} size="md" disabled={!user || !chatInput.trim()}>
-                      <Send size={16} />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            {/* Recommended Videos Section */}
-            <Card className="p-4 flex-grow">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                  <PlayCircleIcon size={20} className="mr-2 text-red-600"/> Recommended Videos
-              </h3>
-              <div className="space-y-3">
-                  {recommendedVideos.map(video => (
-                      <Card key={video.id} className="p-3 hover:bg-gray-50 transition-colors">
-                          <div className="flex items-start space-x-3">
-                              <img src={video.thumbnailUrl} alt={video.title} className="w-20 h-12 object-cover rounded flex-shrink-0"/>
-                              <div className="flex-1 min-w-0">
-                                  <h4 className="text-xs font-semibold text-gray-900 truncate" title={video.title}>{video.title}</h4>
-                                  <p className="text-xs text-gray-500 truncate">{video.channel}</p>
-                                  <div className="flex items-center justify-between text-xs text-gray-400 mt-0.5">
-                                      <span>{video.views}</span>
-                                      <span>{video.duration}</span>
-                                  </div>
-                                  <Button 
-                                      variant="ghost" 
-                                      size="sm" 
-                                      className="text-blue-600 hover:bg-blue-50 px-1 py-0.5 text-xs mt-1"
-                                      onClick={() => handleRecommendedVideoClick(video)}
-                                  >
-                                      Study this video
-                                  </Button>
-                              </div>
-                          </div>
-                      </Card>
-                  ))}
               </div>
             </Card>
+            
+            <div className="p-4 border-t bg-white">
+                <h3 className="text-md font-semibold text-gray-800 mb-3 flex items-center">
+                    <PlayCircleIcon size={18} className="mr-2 text-red-600"/> Recommended Videos
+                </h3>
+                <div className="space-y-3">
+                    {recommendedVideos.map(video => (
+                        <Card key={video.id} className="p-2.5 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-start space-x-2.5">
+                                <img src={video.thumbnailUrl} alt={video.title} className="w-20 h-12 object-cover rounded flex-shrink-0"/>
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="text-xs font-semibold text-gray-900 truncate" title={video.title}>{video.title}</h4>
+                                    <p className="text-xs text-gray-500 truncate">{video.channel}</p>
+                                    <div className="flex items-center justify-between text-xs text-gray-400 mt-0.5">
+                                        <span>{video.views}</span>
+                                        <span>{video.duration}</span>
+                                    </div>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="text-blue-600 hover:bg-blue-50 px-1 py-0.5 text-xs mt-1"
+                                        onClick={() => handleRecommendedVideoClick(video)}
+                                    >
+                                        Study this video
+                                    </Button>
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            </div>
           </motion.div>
         </div>
 

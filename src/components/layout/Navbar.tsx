@@ -4,11 +4,18 @@ import { Brain, User, Trophy, BookOpen, Users, LogOut, Settings, ListChecks, You
 import { useAuth } from '../../context/AuthContext';
 import { AuthModal } from '../auth/AuthModal';
 import { InitialStudyDataType } from '../../App';
-import { useTranslation } from '../../hooks/useTranslation'; // New import
+import { useTranslation } from '../../hooks/useTranslation';
+
+// Define a more generic type for navigation parameters
+export type NavParamsType = {
+  studyParams?: InitialStudyDataType;
+  channelId?: string;
+  channelName?: string;
+};
 
 interface NavbarProps {
   activeTab: string;
-  onTabChange: (tab: string, studyParams?: InitialStudyDataType) => void;
+  onTabChange: (tab: string, navParams?: NavParamsType) => void; // Use NavParamsType
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
@@ -40,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 cursor-pointer" onClick={() => onTabChange('dashboard')}>
                 <Brain className="text-blue-600" size={32} />
                 <span className="text-xl font-bold text-gray-900">{t('navbar.title')}</span>
               </div>
@@ -53,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
                       key={tab.id}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => onTabChange(tab.id)}
+                      onClick={() => onTabChange(tab.id)} // Pass only tab id for main tabs
                       className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-all duration-200 ${
                         activeTab === tab.id
                           ? 'bg-blue-100 text-blue-700'

@@ -9,9 +9,9 @@ export interface User {
   streak: number;
   joinedAt: Date;
   role?: 'student' | 'teacher' | 'parent';
-  academicLevel?: string; // e.g., 'class_1_5', 'class_6_8', 'class_9_10', 'class_11_12', 'dropper', 'graduate'
-  examPreferences?: string[]; // e.g., ['JEE', 'NEET']
-  preferredLanguage?: string; // e.g., 'en', 'hi'
+  academicLevel?: string; 
+  examPreferences?: string[]; 
+  preferredLanguage?: string; 
   isProfileComplete?: boolean;
 }
 
@@ -88,5 +88,78 @@ export interface InputContent {
     };
     outputLanguage: string; 
     aiPrompt?: string; 
+    thumbnailUrl?: string; // Added for YouTube video context in StudyPage
   };
+}
+
+// New types for Channel Videos API
+export interface VideoThumbnail {
+  url: string;
+  width: number;
+  height: number;
+}
+
+export interface VideoThumbnails {
+  default: VideoThumbnail;
+  medium: VideoThumbnail;
+  high: VideoThumbnail;
+}
+
+export interface VideoSnippet {
+  publishedAt: string;
+  channelId: string;
+  title: string;
+  description: string;
+  thumbnails: VideoThumbnails;
+  channelTitle: string;
+  liveBroadcastContent: string;
+  publishTime: string;
+}
+
+export interface VideoId {
+  kind: string;
+  videoId: string;
+}
+
+export interface VideoItem {
+  kind: string;
+  etag: string;
+  id: VideoId;
+  snippet: VideoSnippet;
+}
+
+export interface PageInfo {
+  totalResults: number;
+  resultsPerPage: number;
+}
+
+export interface ChannelVideosApiResponseData {
+  kind:string;
+  etag: string;
+  nextPageToken?: string;
+  prevPageToken?: string;
+  regionCode: string;
+  pageInfo: PageInfo;
+  items: VideoItem[];
+}
+
+export interface ChannelVideosApiResponse {
+  status_code: number;
+  data: ChannelVideosApiResponseData;
+}
+
+// New types for Live Transcription API
+export interface ApiTranscriptItem {
+  text: string;
+  timeline: string; // e.g., "[0s - 10s]"
+}
+
+export interface LiveTranscriptionData {
+  stream_id: string;
+  transcripts: ApiTranscriptItem[];
+}
+
+export interface LiveTranscriptionApiResponse {
+  status_code: number;
+  data: LiveTranscriptionData;
 }

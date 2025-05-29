@@ -285,6 +285,17 @@ class StorageService {
     return total;
   }
 
+  // User Notes
+  saveUserNote(userId: string, topic: string, noteContent: string): void {
+    const key = `userNote-${userId}-${topic}`;
+    this.setItem(key, noteContent);
+  }
+
+  getUserNote(userId: string, topic: string): string | null {
+    const key = `userNote-${userId}-${topic}`;
+    return this.getItem<string>(key);
+  }
+
   clearAllData(): void {
     const keysToKeep = ['user']; 
     const allKeys = Object.keys(localStorage);

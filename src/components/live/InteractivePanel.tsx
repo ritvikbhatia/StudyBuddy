@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ListChecks, HelpCircle, BarChart3, CheckCircle, XCircle, Clock, Award, Bell } from 'lucide-react';
+import { ListChecks, HelpCircle, BarChart3, CheckCircle, XCircle, Clock, Award, Loader2, AlertTriangle } from 'lucide-react'; // Added Loader2, AlertTriangle
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { mockTranscript, TranscriptSegment, liveClassMockMcqs, MCQ } from './LiveClassesPage'; // Import shared types/data
+import { ApiTranscriptItem } from '../../types'; // Import new type
 
 export interface LeaderboardEntry {
   id: string;
@@ -14,8 +14,19 @@ export interface LeaderboardEntry {
   avgTime: number; // in seconds
 }
 
+export interface MCQ { // Re-defining MCQ here if not imported from LiveClassesPage
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswerIndex: number;
+  explanation: string;
+}
+
 interface InteractivePanelProps {
   currentSimulatedTime: number;
+  liveTranscripts: ApiTranscriptItem[]; // Updated prop
+  loadingTranscripts: boolean;
+  transcriptError: string | null;
   currentMCQ: MCQ | null;
   mcqTimer: number;
   leaderboardData: LeaderboardEntry[];
@@ -23,8 +34,21 @@ interface InteractivePanelProps {
   onQuizAnswerSubmit: (isCorrect: boolean) => void;
 }
 
+// Helper function to parse timeline string like "[0s - 10s]"
+const parseTimeline = (timeline: string): { start: number; end: number } | null => {
+  const match = timeline.match(/\[(\d+)s - (\d+)s\]/);
+  if (match && match[1] && match[2]) {
+    return { start: parseInt(match[1], 10), end: parseInt(match[2], 10) };
+  }
+  return null;
+};
+
+
 export const InteractivePanel: React.FC<InteractivePanelProps> = ({
   currentSimulatedTime,
+  liveTranscripts,
+  loadingTranscripts,
+  transcriptError,
   currentMCQ,
   mcqTimer,
   leaderboardData,
@@ -35,41 +59,47 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
   const [selectedMCQAnswer, setSelectedMCQAnswer] = useState<number | null>(null);
   const [mcqFeedback, setMcqFeedback] = useState<{ correct: boolean; explanation: string } | null>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
-  const [currentTranscriptSegment, setCurrentTranscriptSegment] = useState<TranscriptSegment | null>(mockTranscript[0]);
+  const [activeTranscriptIndex, setActiveTranscriptIndex] = useState<number>(-1);
 
   useEffect(() => {
-    // Update transcript based on simulated time
-    const nextTranscriptSegment = mockTranscript.find(
-      segment => currentSimulatedTime >= segment.startTime && 
-                 (mockTranscript.findIndex(s => s.id === segment.id) === mockTranscript.length - 1 || 
-                  currentSimulatedTime < mockTranscript[mockTranscript.findIndex(s => s.id === segment.id) + 1].startTime)
-    );
-    if (nextTranscriptSegment && nextTranscriptSegment.id !== currentTranscriptSegment?.id) {
-      setCurrentTranscriptSegment(nextTranscriptSegment);
+    // Determine active transcript segment
+    let foundActiveIndex = -1;
+    for (let i = 0; i < liveTranscripts.length; i++) {
+      const timelineRange = parseTimeline(liveTranscripts[i].timeline);
+      if (timelineRange && currentSimulatedTime >= timelineRange.start && currentSimulatedTime <= timelineRange.end) {
+        foundActiveIndex = i;
+        break;
+      }
+      // If no exact match, highlight the one whose start time is closest but not past current time
+      if (timelineRange && currentSimulatedTime >= timelineRange.start) {
+        foundActiveIndex = i; 
+      }
     }
-  }, [currentSimulatedTime, currentTranscriptSegment?.id]);
+    if (foundActiveIndex !== activeTranscriptIndex) {
+      setActiveTranscriptIndex(foundActiveIndex);
+    }
+  }, [currentSimulatedTime, liveTranscripts, activeTranscriptIndex]);
 
   useEffect(() => {
-    if (transcriptContainerRef.current && currentTranscriptSegment) {
-      const activeElement = transcriptContainerRef.current.querySelector(`[data-segment-id="${currentTranscriptSegment.id}"]`);
+    if (transcriptContainerRef.current && activeTranscriptIndex !== -1) {
+      const activeElement = transcriptContainerRef.current.children[activeTranscriptIndex] as HTMLElement;
       if (activeElement) {
         activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
-  }, [currentTranscriptSegment]);
+  }, [activeTranscriptIndex]);
   
-  // Reset MCQ feedback when a new MCQ loads
   useEffect(() => {
     setSelectedMCQAnswer(null);
     setMcqFeedback(null);
   }, [currentMCQ]);
 
   const handleMCQSelect = (selectedIndex: number) => {
-    if (!currentMCQ || mcqFeedback) return; // Don't allow re-answer or answer if no feedback yet
+    if (!currentMCQ || mcqFeedback) return;
     setSelectedMCQAnswer(selectedIndex);
     const correct = selectedIndex === currentMCQ.correctAnswerIndex;
     setMcqFeedback({ correct, explanation: currentMCQ.explanation });
-    onQuizAnswerSubmit(correct); // Notify parent
+    onQuizAnswerSubmit(correct);
   };
 
   const tabs = [
@@ -79,7 +109,7 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
   ];
 
   return (
-    <Card className="p-0 flex flex-col h-full interactive-panel-actual-height"> {/* Added class for height query */}
+    <Card className="p-0 flex flex-col h-full interactive-panel-actual-height">
       <div className="flex border-b border-gray-200 sticky top-0 bg-white z-10">
         {tabs.map(tab => (
           <button
@@ -106,22 +136,39 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
             <motion.div 
               key="transcription"
               initial={{ opacity: 0, y:10 }} animate={{ opacity: 1, y:0 }} exit={{ opacity: 0, y:-10 }}
-              ref={transcriptContainerRef} className="space-y-2 h-[calc(100%-0px)] overflow-y-auto pr-2" // Ensure full height for scroll
+              ref={transcriptContainerRef} className="space-y-2 h-[calc(100%-0px)] overflow-y-auto pr-2"
             >
-              {mockTranscript.map(segment => (
+              {loadingTranscripts && liveTranscripts.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <Loader2 size={32} className="animate-spin mb-2" />
+                  <p>Loading transcripts...</p>
+                </div>
+              )}
+              {transcriptError && (
+                 <div className="flex flex-col items-center justify-center h-full text-red-500 p-4 bg-red-50 rounded-md">
+                  <AlertTriangle size={32} className="mb-2" />
+                  <p>{transcriptError}</p>
+                </div>
+              )}
+              {!loadingTranscripts && !transcriptError && liveTranscripts.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <ListChecks size={32} className="mb-2" />
+                  <p>No transcripts available yet for this stream.</p>
+                </div>
+              )}
+              {liveTranscripts.map((segment, index) => (
                 <motion.p
-                  key={segment.id}
-                  data-segment-id={segment.id}
+                  key={index} // Use index as key since API might not provide unique IDs for transcripts
                   initial={{ opacity: 0.6 }}
-                  animate={{ opacity: currentTranscriptSegment?.id === segment.id ? 1 : 0.7, 
-                             fontWeight: currentTranscriptSegment?.id === segment.id ? '600' : '400',
-                             backgroundColor: currentTranscriptSegment?.id === segment.id ? 'rgba(59, 130, 246, 0.05)' : 'transparent'
+                  animate={{ opacity: activeTranscriptIndex === index ? 1 : 0.7, 
+                             fontWeight: activeTranscriptIndex === index ? '600' : '400',
+                             backgroundColor: activeTranscriptIndex === index ? 'rgba(59, 130, 246, 0.05)' : 'transparent'
                            }}
                   className={`text-sm transition-all duration-300 p-1.5 rounded ${
-                    currentTranscriptSegment?.id === segment.id ? 'text-gray-900' : 'text-gray-600'
+                    activeTranscriptIndex === index ? 'text-gray-900' : 'text-gray-600'
                   }`}
                 >
-                  <span className="font-semibold text-blue-600 mr-1">{`[${Math.floor(segment.startTime/60)}:${(segment.startTime%60).toString().padStart(2,'0')}]`}</span>
+                  <span className="font-semibold text-blue-600 mr-1">{segment.timeline}</span>
                   {segment.text}
                 </motion.p>
               ))}
@@ -130,7 +177,7 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
 
           {activeTab === 'quiz' && currentMCQ && (
             <motion.div 
-              key={`quiz-${currentMCQ.id}`} // Key change to force re-animation
+              key={`quiz-${currentMCQ.id}`}
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
@@ -179,7 +226,6 @@ export const InteractivePanel: React.FC<InteractivePanelProps> = ({
                 <p>Quiz questions will appear here periodically.</p>
             </motion.div>
           )}
-
 
           {activeTab === 'leaderboard' && (
             <motion.div 
