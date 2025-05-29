@@ -39,10 +39,10 @@ export interface Quiz {
 
 export interface Question {
   id: string;
-  type: 'mcq' | 'subjective';
+  type: 'mcq' | 'subjective'; // 'one-word' from API will be mapped to 'subjective'
   question: string;
   options?: string[];
-  correctAnswer: string | number;
+  correctAnswer: string | number; // For MCQ, this will be the index of the correct option
   explanation?: string;
   points: number;
 }
@@ -88,7 +88,7 @@ export interface InputContent {
     };
     outputLanguage: string; 
     aiPrompt?: string; 
-    thumbnailUrl?: string; // Added for YouTube video context in StudyPage
+    thumbnailUrl?: string;
   };
 }
 
@@ -151,7 +151,7 @@ export interface ChannelVideosApiResponse {
 // New types for Live Transcription API
 export interface ApiTranscriptItem {
   text: string;
-  timeline: string; // e.g., "[0s - 10s]"
+  timeline: string; 
 }
 
 export interface LiveTranscriptionData {
@@ -162,4 +162,59 @@ export interface LiveTranscriptionData {
 export interface LiveTranscriptionApiResponse {
   status_code: number;
   data: LiveTranscriptionData;
+}
+
+// Types for the Study Materials Generation API (from text)
+export interface ApiMindMapNode {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
+  color: string;
+  children: ApiMindMapNode[];
+}
+
+export interface ApiQuizQuestion {
+  type: 'mcq' | 'one-word';
+  question: string;
+  options?: string[]; // Only for MCQ
+  answer: string;    // For MCQ, this is the text of the correct option; for one-word, it's the answer
+}
+
+export interface ApiFlashcard {
+  question: string;
+  answer: string;
+}
+
+export interface ApiSummary {
+  text: string;
+}
+
+export interface ApiStudyMaterialsData {
+  mindmap: ApiMindMapNode;
+  quiz: ApiQuizQuestion[];
+  flashcards: ApiFlashcard[];
+  summary: ApiSummary;
+}
+
+export interface ApiGenerateStudyMaterialsResponse {
+  success: boolean;
+  message: string;
+  data: ApiStudyMaterialsData;
+}
+
+// Types for the AI Chat API
+export interface ApiAIChatResponseDataInternal {
+  success: boolean;
+  message: string;
+  data: string; // This is the AI's answer string
+}
+
+export interface ApiAIChatResponseTopLevel {
+  status_code: number;
+  data: ApiAIChatResponseDataInternal;
+  totalCount?: number; // Optional based on example
+  message: string;
+  error_messages?: string[]; // Optional
+  error: boolean;
 }

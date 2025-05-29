@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Maximize, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType } from 'lucide-react'; // Added ImageIconLucide, FileType
+import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Maximize, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -11,7 +11,7 @@ import { contentService, PwVideo } from '../../services/contentService';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import { InitialStudyDataType } from '../../App';
-
+import { faker } from '@faker-js/faker'; // For generating chatId
 
 interface StudyMaterialResponseProps {
   data: {
@@ -43,7 +43,7 @@ const getYoutubeEmbedUrl = (url: string): string | null => {
     const match = url.match(regex);
     if (match && match[1]) {
       videoId = match[1];
-    } else if (url.length === 11 && !url.includes('.')) { // Basic check for just video ID
+    } else if (url.length === 11 && !url.includes('.')) { 
         videoId = url;
     }
   }
@@ -72,8 +72,13 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   const [shareableLink, setShareableLink] = useState('');
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const effectiveOutputLanguage = (data?.outputLanguage?.trim() !== '') ? data.outputLanguage : 'english';
+  
+  const lang = data?.outputLanguage;
+  const effectiveOutputLanguage = (lang && lang.trim() !== '') ? lang : 'english';
+  
   const languageLabel = effectiveOutputLanguage.charAt(0).toUpperCase() + effectiveOutputLanguage.slice(1);
+  
+  const [aiTutorChatId, setAiTutorChatId] = useState<string | null>(null); // For AI Tutor session
   const initialChatMessageText = isTopicView
     ? `Viewing materials for ${data.topic} (in ${languageLabel}). Ask me about this topic!`
     : `Hi! I'm your AI tutor for ${data.topic} (in ${languageLabel}). How can I help you learn better?`;
@@ -92,19 +97,31 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [chatMessages]);
+  
+  useEffect(() => {
+    // Generate a new chatId for the AI Tutor session when the topic or user changes
+    const newChatId = user ? `user-${user.id}-${data.topic}-${Date.now()}` : `guest-${data.topic}-${Date.now()}`;
+    setAiTutorChatId(faker.string.uuid()); // Or a more structured ID like above
+    
+    // Reset chat messages for new topic
+     setChatMessages([{ id: 'initial-ai-message-reset', type: 'ai', content: 
+        isTopicView 
+        ? `Viewing materials for ${data.topic} (in ${languageLabel}). Ask me about this topic!`
+        : `Hi! I'm your AI tutor for ${data.topic} (in ${languageLabel}). How can I help you learn better?`, 
+     timestamp: new Date() }]);
+
+  }, [data.topic, user, isTopicView, languageLabel]); // Rerun if topic or user changes
 
   useEffect(() => {
-    // Only set recommended video if the input type is NOT a video itself
     if (data.originalInput.type !== 'youtube' && data.originalInput.type !== 'video' && data.originalInput.type !== 'videolecture') {
       const videos = contentService.searchPwVideos(data.topic);
       if (videos.length > 0) {
         setRecommendedVideo(videos[0]);
       } else {
-        // Fallback to a generic PW video if no topic-specific one is found
         setRecommendedVideo(contentService.getAllPwVideos()[0]); 
       }
     } else {
-      setRecommendedVideo(null); // Clear recommended if input is video
+      setRecommendedVideo(null); 
     }
     setLocalQuizData(data.quiz);
   }, [data.topic, data.originalInput.type, data.quiz]);
@@ -144,7 +161,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       if (question.type === 'mcq') {
         if (userAnswer === question.correctAnswer) score += question.points;
       } else {
-        if (userAnswer && typeof userAnswer === 'string' && userAnswer.trim().length > 10) score += Math.floor(question.points * 0.7);
+        if (userAnswer && typeof userAnswer === 'string' && userAnswer.trim().length > 5) score += Math.floor(question.points * 0.7); // Simplified subjective scoring
       }
     });
     setQuizScore(score);
@@ -156,19 +173,27 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   };
 
   const handleChatSend = async () => {
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || !aiTutorChatId) {
+      if(!aiTutorChatId) toast.error("Chat session not initialized. Please wait.");
+      return;
+    }
     const userMessage = { id: Date.now().toString(), type: 'user' as const, content: chatInput, timestamp: new Date() };
     setChatMessages(prev => [...prev, userMessage]);
     const currentChatInput = chatInput;
     setChatInput('');
     setIsAITyping(true);
     try {
-      const chatContextContent = data.originalInput?.content || data.topic;
-      const aiResponse = await aiService.generateChatResponse(currentChatInput, data.topic, chatContextContent, effectiveOutputLanguage);
-      const aiMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: aiResponse, timestamp: new Date() };
+      const summaryMaterial = data.materials.find(m => m.type === 'summary');
+      const context = summaryMaterial?.content || data.topic; // Use summary or topic as context
+      
+      const aiResponseText = await aiService.getAIChatResponse(context, currentChatInput, aiTutorChatId);
+      const aiMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: aiResponseText, timestamp: new Date() };
       setChatMessages(prev => [...prev, aiMessage]);
-    } catch (error) {
-      toast.error('Failed to get AI response.');
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to get AI response. Please try again.';
+      toast.error(errorMessage);
+      const aiErrorMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: `Sorry, I couldn't process that: ${errorMessage}`, timestamp: new Date() };
+      setChatMessages(prev => [...prev, aiErrorMessage]);
     } finally {
       setIsAITyping(false);
     }
@@ -226,9 +251,8 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   const handleBattleButtonClick = () => {
     if (onTabChange) {
       onTabChange('battle', { inputType: 'text', content: data.topic, topic: data.topic });
-      toast(`Joining battle for topic: ${data.topic}`);
     } else {
-      toast.error("Navigation to Battle page is not available.");
+      toast("Navigation to Battle page is not available in this context.");
     }
   };
 
@@ -250,10 +274,9 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       case 'youtube':
         const embedUrl = getYoutubeEmbedUrl(content);
         return embedUrl ? (
-          <iframe className="w-full h-full rounded-lg" src={embedUrl} title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+          <iframe className="w-full h-full rounded-lg" src={embedUrl} title={metadata?.title || "YouTube video player"} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
         ) : <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><YoutubeIcon size={48} className="mb-2 text-red-500" /><p className="font-semibold text-center">Invalid or unrenderable YouTube URL:<br/>{content}</p></div>;
       case 'image':
-        // Assuming content is a direct URL to an image
         return (
           <div className="bg-gray-100 p-2 rounded-lg h-full flex items-center justify-center overflow-hidden">
             <img src={content} alt={metadata?.fileName || data.topic || 'Uploaded Image'} className="max-w-full max-h-full object-contain rounded"/>
@@ -261,7 +284,11 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
         );
       case 'document':
         if (metadata?.documentType === 'pdf' && content) {
-           // Assuming content is a direct URL to a PDF
+          // Basic check for common PDF hosting patterns that might block iframe
+          const isLikelyBlocked = content.includes('drive.google.com') && !content.includes('/preview');
+          if (isLikelyBlocked) {
+             return <div className="bg-gray-200 p-4 rounded-lg h-full flex flex-col items-center justify-center"><FileType size={48} className="mb-2 text-gray-500" /><p className="font-semibold">{metadata?.fileName || 'PDF Document'}</p><p className="text-sm text-red-600 text-center">Direct embedding for this PDF might be restricted. <a href={content} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Open PDF in new tab</a>.</p></div>;
+          }
           return (
             <iframe src={content} className="w-full h-full rounded-lg" title={metadata?.fileName || data.topic || 'PDF Document'}>
               <p className="p-4">Your browser does not support PDFs. Please download the PDF to view it: <a href={content} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Download PDF</a></p>
@@ -276,7 +303,6 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       case 'audio':
          return <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><Mic size={48} className="mb-2" /><p className="font-semibold">{metadata?.fileName || content}</p><p className="text-sm">Audio Content (Playback N/A)</p></div>;
       default:
-        // Fallback to recommended video if no specific renderer and not already a video input
         if (recommendedVideo) {
             const recEmbedUrl = getYoutubeEmbedUrl(recommendedVideo.youtubeUrl);
             return recEmbedUrl ? (
@@ -323,7 +349,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
               {renderOriginalInputContent()}
             </div>
           </Card>
-          <Card className="p-4 flex-shrink-0">
+          <Card className="p-4 flex-shrink-0 interactive-tools-card">
             <h3 className="text-md font-semibold text-gray-800 mb-3">Interactive Tools</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {interactiveTools.map(tool => {
@@ -361,9 +387,9 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
             onClick={(e) => e.stopPropagation()}
              style={{ 
               height: videoPlayerRef.current && window.innerWidth >=1024 
-                ? `${videoPlayerRef.current.offsetHeight + (document.querySelector('.interactive-tools-card')?.clientHeight || 150) + 16}px` // 16px for gap
-                : 'calc(100vh - 4rem)', // Fallback height for mobile or if querySelector fails
-              maxHeight: 'calc(100vh - 4rem)' // Ensure it doesn't exceed viewport height
+                ? `${videoPlayerRef.current.offsetHeight + (document.querySelector('.interactive-tools-card')?.clientHeight || 150) + 16}px` 
+                : 'calc(100vh - 4rem)', 
+              maxHeight: 'calc(100vh - 4rem)' 
             }}
           >
             <Card className="p-0 flex flex-col flex-grow h-full">
@@ -398,9 +424,9 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
                     onKeyPress={(e) => e.key === 'Enter' && handleChatSend()} 
                     placeholder={data.topic ? "Ask about the materials..." : "Generate materials to enable AI Tutor."} 
                     className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
-                    disabled={!data.topic} // Enable if there's a topic
+                    disabled={!data.topic || !aiTutorChatId} 
                   />
-                  <Button onClick={handleChatSend} size="md" disabled={!chatInput.trim() || !data.topic}>
+                  <Button onClick={handleChatSend} size="md" disabled={!chatInput.trim() || !data.topic || !aiTutorChatId}>
                     <Send size={16} />
                   </Button>
                 </div>
@@ -417,7 +443,6 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       )}
 
       <AnimatePresence>
-      {/* Flashcards Modal */}
       <Modal key="flashcards-modal" isOpen={activeToolModal === 'flashcards'} onClose={() => setActiveToolModal(null)} title="Flashcards">
         {flashcardMaterial && flashcardMaterial.content.cards && flashcardMaterial.content.cards.length > 0 ? (
           <div className="text-center">
@@ -448,7 +473,6 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
         ) : <p>No flashcards available for this topic.</p>}
       </Modal>
 
-      {/* Mind Map Modal */}
       <Modal key="mindmap-modal" isOpen={activeToolModal === 'mindmap'} onClose={() => setActiveToolModal(null)} title="Mind Map">
         {mindMapMaterial && mindMapMaterial.content.central ? (
           <div className="text-center">
@@ -466,10 +490,29 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
               ))}
             </div>
           </div>
+        ) : mindMapMaterial && mindMapMaterial.content.id ? ( 
+          <div className="text-center">
+            <div className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold mb-6 inline-block text-xl shadow-md">{mindMapMaterial.content.title}</div>
+            {mindMapMaterial.content.children && mindMapMaterial.content.children.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {mindMapMaterial.content.children.map((child: any, index: number) => (
+                  <Card key={child.id || index} className="p-4 bg-gray-50" style={{borderColor: child.color}}>
+                    <h4 className="font-semibold mb-2 text-lg" style={{color: child.color}}>{child.title}</h4>
+                    {child.children && child.children.length > 0 && (
+                      <ul className="space-y-1 list-disc list-inside text-left pl-2">
+                        {child.children.map((subChild: any, i: number) => (
+                          <li key={subChild.id || i} className="text-gray-700 text-sm" style={{color: subChild.color || 'inherit'}}>{subChild.title}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         ) : <p>Mind map not available for this topic.</p>}
       </Modal>
 
-      {/* Summary Modal */}
       <Modal key="summary-modal" isOpen={activeToolModal === 'summary'} onClose={() => setActiveToolModal(null)} title="Summary">
         {summaryMaterial ? (
           <div className="prose prose-sm max-w-none max-h-[60vh] overflow-y-auto p-1">
@@ -478,7 +521,6 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
         ) : <p>Summary not available for this topic.</p>}
       </Modal>
 
-      {/* Quiz Modal */}
       <Modal key="quiz-modal" isOpen={activeToolModal === 'quiz'} onClose={() => setActiveToolModal(null)} title="Interactive Quiz">
         {isGeneratingQuiz ? (
           <div className="text-center py-10"><Brain size={32} className="mx-auto animate-pulse text-blue-500 mb-2" /> Generating quiz...</div>
@@ -522,7 +564,6 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
         )}
       </Modal>
 
-      {/* Notes Modal */}
       <Modal key="notes-modal" isOpen={activeToolModal === 'notes'} onClose={() => setActiveToolModal(null)} title={`My Notes for ${data.topic}`}>
         <textarea
           value={currentNoteContent}
@@ -535,7 +576,6 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
         </div>
       </Modal>
 
-      {/* Share Modal */}
       <Modal key="share-modal" isOpen={activeToolModal === 'share'} onClose={() => setActiveToolModal(null)} title="Share Study Material">
         <p className="text-sm text-gray-600 mb-2">Share this study material with others:</p>
         <div className="flex items-center space-x-2 p-3 border border-gray-300 rounded-lg bg-gray-50">

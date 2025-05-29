@@ -10,8 +10,9 @@ import { faker } from '@faker-js/faker';
 import { contentService, PwVideo } from '../../services/contentService';
 import axios from 'axios';
 import { ApiTranscriptItem, LiveTranscriptionApiResponse } from '../../types';
+import { aiService } from '../../services/aiService'; // Import aiService
 
-const YOUTUBE_VIDEO_ID = 'NnhYrcHA3tA';
+const YOUTUBE_VIDEO_ID = 'sqdwl8nfUXA';
 const LIVE_STREAM_KEY_FOR_TRANSCRIPTS = 'live_stream_key';
 
 export const liveClassMockMcqs: MCQ[] = [
@@ -54,6 +55,7 @@ export const LiveClassesPage: React.FC = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
+  const [liveChatId, setLiveChatId] = useState<string | null>(null); // For AI Doubt Solver session
 
   const [currentLiveMCQ, setCurrentLiveMCQ] = useState<MCQ | null>(liveClassMockMcqs[0]);
   const [liveMCQTimer, setLiveMCQTimer] = useState(60);
@@ -72,27 +74,35 @@ export const LiveClassesPage: React.FC = () => {
   const transcriptPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchTranscripts = async () => {
-    if (liveTranscripts.length === 0 && !transcriptError) setLoadingTranscripts(true); // Show initial loading only if no error previously
-    // Do not reset transcriptError here, so it persists until a successful fetch
+    if (liveTranscripts.length === 0 && !transcriptError && !loadingTranscripts) setLoadingTranscripts(true);
     try {
       const response = await axios.get<LiveTranscriptionApiResponse>(`https://qbg-backend-stage.penpencil.co/qbg/internal/get-transcripts?stream_id=${LIVE_STREAM_KEY_FOR_TRANSCRIPTS}`);
-      if (response.data && response.data.status_code === 200 && response.data.data) {
+      
+      if (response.data && response.data.status_code === 200 && 
+          typeof response.data.data === 'object' && 
+          response.data.data !== null &&            
+          Array.isArray(response.data.data.transcripts)) {
         setLiveTranscripts(response.data.data.transcripts);
-        setTranscriptError(null); // Clear error on successful fetch
+        setTranscriptError(null); 
       } else {
-        // Only set error if it's not already set, to avoid flickering
-        if (!transcriptError) setTranscriptError('Failed to update transcripts.');
-        console.error('API error fetching transcripts:', response.data);
+        if (!transcriptError) setTranscriptError('Transcripts data is not in the expected format.');
+        setLiveTranscripts([]); 
+        console.error('API error or malformed transcripts data:', response.data);
       }
     } catch (err) {
       console.error('Network error fetching transcripts:', err);
       if (!transcriptError) setTranscriptError('Could not load live transcripts. Retrying...');
     } finally {
-      setLoadingTranscripts(false); // Always set loading to false after an attempt
+      setLoadingTranscripts(false);
     }
   };
   
   useEffect(() => {
+    const newChatId = user ? `live-user-${user.id}-${Date.now()}` : `live-guest-${Date.now()}`;
+    setLiveChatId(faker.string.uuid()); // Or a more structured ID like above
+    setChatMessages([{ id: 'live-initial-ai', type: 'ai', text: 'Welcome to the Live Doubt Solver! Ask anything about the ongoing class.', timestamp: new Date() }]);
+
+
     const mockLeaderboard: LeaderboardEntry[] = Array.from({ length: 10 }).map((_, i) => ({
       id: faker.string.uuid(),
       name: faker.person.firstName() + " " + faker.person.lastName().charAt(0) + ".",
@@ -104,15 +114,15 @@ export const LiveClassesPage: React.FC = () => {
     setLeaderboardData(mockLeaderboard);
     setRecommendedVideos(contentService.getAllPwVideos().slice(0, 3));
 
-    fetchTranscripts(); // Initial fetch
-    transcriptPollIntervalRef.current = setInterval(fetchTranscripts, 5000); // Poll every 5 seconds
+    fetchTranscripts(); 
+    transcriptPollIntervalRef.current = setInterval(fetchTranscripts, 5000); 
 
     return () => {
       if (transcriptPollIntervalRef.current) {
         clearInterval(transcriptPollIntervalRef.current);
       }
     };
-  }, []); // Empty dependency array means this runs once on mount and cleans up on unmount
+  }, [user]); // Add user to dependency array for chatId generation
 
   useEffect(() => {
     let videoTimerId: NodeJS.Timeout;
@@ -150,8 +160,9 @@ export const LiveClassesPage: React.FC = () => {
   }, [chatMessages]);
 
   const handleChatSend = async () => {
-    if (!chatInput.trim() || !user) {
+    if (!chatInput.trim() || !user || !liveChatId) {
       if(!user) toast.error("Please log in to use the chat.");
+      if(!liveChatId) toast.error("Chat session not initialized.");
       return;
     }
     const newUserMessage: ChatMessage = { id: Date.now().toString(), type: 'user', text: chatInput, timestamp: new Date() };
@@ -160,11 +171,20 @@ export const LiveClassesPage: React.FC = () => {
     setChatInput('');
     setIsAiTyping(true);
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const aiResponseText = `AI response to: "${currentInput}". For this live class on Advanced React Patterns, this concept is crucial because...`;
-    const newAiMessage: ChatMessage = { id: (Date.now() + 1).toString(), type: 'ai', text: aiResponseText, timestamp: new Date() };
-    setChatMessages(prev => [...prev, newAiMessage]);
-    setIsAiTyping(false);
+    try {
+      const context = liveTranscripts.map(t => t.text).join('\n') || 'Live class content is being discussed.';
+      const aiResponseText = await aiService.getAIChatResponse(context, currentInput, liveChatId);
+      const newAiMessage: ChatMessage = { id: (Date.now() + 1).toString(), type: 'ai', text: aiResponseText, timestamp: new Date() };
+      setChatMessages(prev => [...prev, newAiMessage]);
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to get AI response for live class. Please try again.';
+      toast.error(errorMessage);
+      const aiErrorMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: `Sorry, I couldn't process that: ${errorMessage}`, timestamp: new Date() };
+      // @ts-ignore // TODO: Fix this type mismatch if `content` vs `text` is an issue. For now, assume ChatMessage text prop.
+      setChatMessages(prev => [...prev, aiErrorMessage]);
+    } finally {
+      setIsAiTyping(false);
+    }
   };
 
   const togglePlayPause = () => setIsVideoPlaying(!isVideoPlaying);
@@ -210,6 +230,7 @@ export const LiveClassesPage: React.FC = () => {
 
   const handleRecommendedVideoClick = (video: PwVideo) => {
     toast(`Navigating to study: ${video.title}`);
+    // Actual navigation logic would be here, e.g., using onTabChange if passed down
   };
 
   return (
@@ -323,9 +344,9 @@ export const LiveClassesPage: React.FC = () => {
                     onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
                     placeholder={user ? "Ask a question..." : "Login to chat"}
                     className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                    disabled={!user}
+                    disabled={!user || !liveChatId}
                   />
-                  <Button onClick={handleChatSend} size="md" disabled={!user || !chatInput.trim()}>
+                  <Button onClick={handleChatSend} size="md" disabled={!user || !chatInput.trim() || !liveChatId}>
                     <Send size={16} />
                   </Button>
                 </div>

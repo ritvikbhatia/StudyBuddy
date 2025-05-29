@@ -9,7 +9,8 @@ import { storageService } from '../../services/storageService';
 import { contentService, PwVideo } from '../../services/contentService';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { InitialStudyDataType } from '../../App'; // Import the type
+import { InitialStudyDataType } from '../../App'; 
+import { InputContent } from '../../types'; // Import InputContent
 
 interface StudyPageProps {
   onStudyGenerated: (data: any) => void;
@@ -20,7 +21,7 @@ interface StudyPageProps {
 type InputType = 'text' | 'document' | 'audio' | 'video' | 'youtube' | 'videolecture';
 type InputSubType = 'manual' | 'ai-generate' | 'image' | 'pdf' | 'word' | 'other-doc' | 'record' | 'upload-audio' | 'pw-recommendations' | 'external-link' | null;
 
-interface VideoLecture { // This is for the 'Video Lecture' input type, not PW YouTube videos
+interface VideoLecture { 
   id: string;
   title: string;
   thumbnailUrl: string;
@@ -31,8 +32,8 @@ interface VideoLecture { // This is for the 'Video Lecture' input type, not PW Y
 }
 
 const mockVideoLectures: VideoLecture[] = [
-  { id: 'v1', title: 'Newton\'s First Law Explained', thumbnailUrl: 'https://img-wrapper.vercel.app/image?url=https://img-wrapper.vercel.app/image?url=https://placehold.co/320x180/3B82F6/FFFFFF?text=Physics+Lecture+1', videoUrl: 'mock://newton1', batch: 'Physics XI', subject: 'Physics', tags: ['Mechanics', 'Newton\'s Laws'] },
-  { id: 'v2', title: 'Introduction to Calculus', thumbnailUrl: 'https://img-wrapper.vercel.app/image?url=https://img-wrapper.vercel.app/image?url=https://placehold.co/320x180/10B981/FFFFFF?text=Maths+Lecture+1', videoUrl: 'mock://calculus_intro', batch: 'Maths XII', subject: 'Mathematics', tags: ['Calculus', 'Basics'] },
+  { id: 'v1', title: 'Newton\'s First Law Explained', thumbnailUrl: 'https://img-wrapper.vercel.app/image?url=https://img-wrapper.vercel.app/image?url=https://img-wrapper.vercel.app/image?url=https://placehold.co/320x180/3B82F6/FFFFFF?text=Physics+Lecture+1', videoUrl: 'mock://newton1', batch: 'Physics XI', subject: 'Physics', tags: ['Mechanics', 'Newton\'s Laws'] },
+  { id: 'v2', title: 'Introduction to Calculus', thumbnailUrl: 'https://img-wrapper.vercel.app/image?url=https://img-wrapper.vercel.app/image?url=https://img-wrapper.vercel.app/image?url=https://placehold.co/320x180/10B981/FFFFFF?text=Maths+Lecture+1', videoUrl: 'mock://calculus_intro', batch: 'Maths XII', subject: 'Mathematics', tags: ['Calculus', 'Basics'] },
 ];
 
 
@@ -47,7 +48,7 @@ const loadingSteps = [
 ];
 
 export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialData, onInitialDataConsumed }) => {
-  const { user } = useAuth();
+  const { user, preferredLanguage } = useAuth(); // Get preferredLanguage
   const [selectedInputType, setSelectedInputType] = useState<InputType | null>(null);
   const [selectedInputSubType, setSelectedInputSubType] = useState<InputSubType>(null);
   
@@ -55,28 +56,28 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
   const [customTopic, setCustomTopic] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [outputLanguage, setOutputLanguage] = useState('english');
+  const [outputLanguage, setOutputLanguage] = useState(preferredLanguage || 'english'); // Use global or default
 
-  // Video Lecture State (for 'videolecture' type, not PW YouTube)
   const [videoLectureStep, setVideoLectureStep] = useState<'batch' | 'subject' | 'tags' | 'videos'>('batch');
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [filteredLocalVideos, setFilteredLocalVideos] = useState<VideoLecture[]>([]); // Renamed to avoid confusion
+  const [filteredLocalVideos, setFilteredLocalVideos] = useState<VideoLecture[]>([]); 
   const [videoSearchTerm, setVideoSearchTerm] = useState('');
 
-  // PW YouTube Video State
   const [pwVideoSearch, setPwVideoSearch] = useState('');
   const [filteredPwVideos, setFilteredPwVideos] = useState<PwVideo[]>([]);
   const [selectedPwVideo, setSelectedPwVideo] = useState<PwVideo | null>(null);
 
-
-  // AI Text Generation State
   const [aiTextPrompt, setAiTextPrompt] = useState('');
   const [isGeneratingAIText, setIsGeneratingAIText] = useState(false);
 
   const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [currentLoadingStep, setCurrentLoadingStep] = useState(0);
+
+  useEffect(() => {
+    setOutputLanguage(preferredLanguage || 'english');
+  }, [preferredLanguage]);
 
   useEffect(() => {
     if (initialData && onInitialDataConsumed) {
@@ -151,7 +152,6 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
     };
   }, [isGenerating]);
 
-  // PW Video Search
   useEffect(() => {
     if (selectedInputType === 'youtube' && selectedInputSubType === 'pw-recommendations') {
       setFilteredPwVideos(contentService.searchPwVideos(pwVideoSearch));
@@ -171,7 +171,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
     setFilteredLocalVideos([]);
     setVideoSearchTerm('');
     setPwVideoSearch('');
-    setFilteredPwVideos(contentService.getAllPwVideos()); // Initialize PW videos
+    setFilteredPwVideos(contentService.getAllPwVideos()); 
     setSelectedPwVideo(null);
   };
 
@@ -202,7 +202,6 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
     }
   };
 
-  // Video Lecture Logic (Local Library)
   const batches = Array.from(new Set(mockVideoLectures.map(v => v.batch)));
   const subjectsForBatch = selectedBatch ? Array.from(new Set(mockVideoLectures.filter(v => v.batch === selectedBatch).map(v => v.subject))) : [];
   const tagsForSubject = selectedSubject ? Array.from(new Set(mockVideoLectures.filter(v => v.subject === selectedSubject).flatMap(v => v.tags))) : [];
@@ -222,9 +221,9 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
 
 
   const handleGenerate = async () => {
-    let finalInputContent = inputContent;
-    let finalInputType = selectedInputType;
-    let metadata: any = { outputLanguage };
+    let finalInputContentString = inputContent;
+    let finalInputTypeForService = selectedInputType;
+    let metadata: InputContent['metadata'] = { outputLanguage };
 
     if (selectedInputType === 'text' && selectedInputSubType === 'ai-generate' && !inputContent && aiTextPrompt) {
       toast.error('Please generate AI text first or switch to manual input.');
@@ -243,31 +242,33 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
       return;
     }
 
-
     if (selectedFile) {
-      finalInputContent = selectedFile.name; 
+      finalInputContentString = selectedFile.name; 
       metadata.fileName = selectedFile.name;
       metadata.fileSize = selectedFile.size;
     }
     
     if (selectedInputType === 'document' && selectedInputSubType) {
-        metadata.documentType = selectedInputSubType;
+        metadata.documentType = selectedInputSubType as 'image' | 'pdf' | 'word' | 'other-doc';
     }
     if (selectedInputType === 'videolecture' && inputContent) { 
-        metadata.videoLectureTitle = inputContent; 
+        metadata.title = inputContent; 
     }
     if (selectedInputType === 'youtube' && selectedInputSubType === 'pw-recommendations' && selectedPwVideo) {
-        finalInputContent = selectedPwVideo.youtubeUrl; // Use URL for processing
-        metadata.youtubeVideoTitle = selectedPwVideo.title;
-        metadata.isPwVideo = true;
+        finalInputContentString = selectedPwVideo.youtubeUrl; 
+        metadata.title = selectedPwVideo.title;
+        metadata.thumbnailUrl = selectedPwVideo.thumbnailUrl;
     }
     if (selectedInputType === 'youtube' && selectedInputSubType === 'external-link') {
-        metadata.youtubeVideoUrl = finalInputContent;
-        metadata.isPwVideo = false;
+        // For external links, the content IS the URL. Topic might be extracted or set manually.
+        metadata.title = customTopic || `YouTube Video: ${finalInputContentString.substring(0,30)}...`;
+    }
+    if (selectedInputType === 'text' && selectedInputSubType === 'ai-generate' && aiTextPrompt) {
+        metadata.aiPrompt = aiTextPrompt;
     }
 
 
-    if (!finalInputContent.trim() && !selectedFile && !(selectedInputType === 'youtube' && selectedInputSubType === 'pw-recommendations' && selectedPwVideo)) {
+    if (!finalInputContentString.trim() && !selectedFile && !(selectedInputType === 'youtube' && selectedInputSubType === 'pw-recommendations' && selectedPwVideo)) {
       toast.error('Please provide some content or select a file/video.');
       return;
     }
@@ -280,30 +281,46 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
     setCurrentLoadingStep(0); 
     
     try {
-      const topic = customTopic.trim() || aiService.extractTopic(finalInputContent, finalInputType || 'text');
-      
-      const studyResponse = await aiService.generateCompleteStudyResponse(
-        finalInputContent, 
-        finalInputType || 'text', 
-        topic,
-        outputLanguage, 
-        metadata
-      );
+      const topic = customTopic.trim() || aiService.extractTopic(finalInputContentString, finalInputTypeForService || 'text');
+      let studyResponse;
+
+      if (selectedInputType === 'text') {
+        studyResponse = await aiService.generateStudyMaterialsFromTextAPI(
+          finalInputContentString,
+          topic,
+          outputLanguage
+        );
+      } else {
+        studyResponse = await aiService.generateCompleteStudyResponse(
+          finalInputContentString, 
+          finalInputTypeForService || 'text', 
+          topic,
+          outputLanguage, 
+          metadata 
+        );
+      }
       
       studyResponse.materials.forEach(material => {
-        storageService.saveStudyMaterial(material);
+        storageService.saveStudyMaterial({...material, userId: user.id}); // Ensure userId is set
       });
 
       if (studyResponse.quiz) {
         storageService.saveQuiz(studyResponse.quiz);
       }
+      
+      // Construct full InputContent object for history
+      const inputHistoryEntry: InputContent & { topic: string } = {
+        type: finalInputTypeForService || 'text',
+        content: finalInputContentString,
+        metadata: {
+          ...metadata, // Existing metadata
+          outputLanguage: outputLanguage, // Ensure outputLanguage is always included
+          title: metadata.title || topic, // Ensure title is present
+        },
+        topic: topic,
+      };
+      storageService.saveInputHistory(inputHistoryEntry);
 
-      storageService.saveInputHistory({
-        type: finalInputType || 'text',
-        content: finalInputContent,
-        topic,
-        metadata,
-      });
 
       storageService.updateTopicFrequency(topic);
       storageService.addActivity({
@@ -317,18 +334,20 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
       toast.success('Study materials generated successfully!', { id: 'generating-final' });
       onStudyGenerated(studyResponse);
       
+      // Reset form
       setInputContent('');
       setCustomTopic('');
       setSelectedFile(null);
       setSelectedInputType(null);
       setSelectedInputSubType(null);
-      setOutputLanguage('english');
+      // Keep outputLanguage as per user's preference or last selection
       setSelectedPwVideo(null);
       setPwVideoSearch('');
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating materials:', error);
-      toast.error('Failed to generate study materials. Please try again.', { id: 'generating-error' });
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to generate study materials. Please try again.';
+      toast.error(errorMessage, { id: 'generating-error', duration: 5000 });
     } finally {
       setIsGenerating(false);
       if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current);
@@ -340,7 +359,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
 
     switch (selectedInputType) {
       case 'text':
-        return ( /* ... existing text input UI ... */ <>
+        return ( <>
             <div className="flex space-x-2 mb-4">
               <Button variant={selectedInputSubType === 'manual' ? 'primary' : 'outline'} onClick={() => setSelectedInputSubType('manual')}>Paste Manually</Button>
               <Button variant={selectedInputSubType === 'ai-generate' ? 'primary' : 'outline'} onClick={() => setSelectedInputSubType('ai-generate')}>
@@ -375,7 +394,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
           </>
         );
       case 'document':
-        return ( /* ... existing document input UI ... */ <>
+        return ( <>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Document Type</label>
               <select 
@@ -394,7 +413,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
           </>
         );
       case 'audio':
-        return ( /* ... existing audio input UI ... */ <>
+        return ( <>
             <div className="flex space-x-2 mb-4">
               <Button variant={selectedInputSubType === 'record' ? 'primary' : 'outline'} onClick={() => setSelectedInputSubType('record')}>Record Audio</Button>
               <Button variant={selectedInputSubType === 'upload-audio' ? 'primary' : 'outline'} onClick={() => setSelectedInputSubType('upload-audio')}>Upload Audio File</Button>
@@ -419,8 +438,8 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
                 variant={selectedInputSubType === 'pw-recommendations' ? 'primary' : 'outline'} 
                 onClick={() => {
                   setSelectedInputSubType('pw-recommendations');
-                  setFilteredPwVideos(contentService.getAllPwVideos()); // Show all initially
-                  setInputContent(''); // Clear external link
+                  setFilteredPwVideos(contentService.getAllPwVideos()); 
+                  setInputContent(''); 
                   setSelectedPwVideo(null);
                 }}
               >
@@ -430,7 +449,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
                 variant={selectedInputSubType === 'external-link' ? 'primary' : 'outline'} 
                 onClick={() => {
                   setSelectedInputSubType('external-link');
-                  setInputContent(''); // Clear PW selection
+                  setInputContent(''); 
                   setSelectedPwVideo(null);
                 }}
               >
@@ -455,8 +474,8 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
                         hover 
                         onClick={() => { 
                           setSelectedPwVideo(video); 
-                          setInputContent(video.title); // Use title for display, actual URL for processing
-                          setCustomTopic(video.title); // Pre-fill topic
+                          setInputContent(video.title); 
+                          setCustomTopic(video.title); 
                           toast.success(`Selected: ${video.title}`); 
                         }}
                         className={`p-3 cursor-pointer ${selectedPwVideo?.id === video.id ? 'ring-2 ring-blue-500' : ''}`}
@@ -486,7 +505,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
             )}
           </>
         );
-      case 'videolecture': // This is the local video library
+      case 'videolecture': 
         return renderVideoLectureSelector();
       default:
         return null;
@@ -514,10 +533,10 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
     </div>
   );
 
-  const renderVideoLectureSelector = () => { // For 'videolecture' type (local library)
+  const renderVideoLectureSelector = () => { 
     return (
       <div className="space-y-4">
-        {videoLectureStep === 'batch' && ( /* ... existing video lecture UI ... */ <div>
+        {videoLectureStep === 'batch' && ( <div>
             <h4 className="font-semibold mb-2">Select Batch:</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {batches.map(batch => (
@@ -526,7 +545,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
             </div>
           </div>
         )}
-        {videoLectureStep === 'subject' && selectedBatch && ( /* ... existing video lecture UI ... */ <div>
+        {videoLectureStep === 'subject' && selectedBatch && ( <div>
             <Button size="sm" variant="ghost" onClick={() => setVideoLectureStep('batch')} className="mb-2">← Back to Batches</Button>
             <h4 className="font-semibold mb-2">Select Subject for {selectedBatch}:</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -536,7 +555,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
             </div>
           </div>
         )}
-        {videoLectureStep === 'tags' && selectedSubject && ( /* ... existing video lecture UI ... */ <div>
+        {videoLectureStep === 'tags' && selectedSubject && ( <div>
             <Button size="sm" variant="ghost" onClick={() => setVideoLectureStep('subject')} className="mb-2">← Back to Subjects</Button>
             <h4 className="font-semibold mb-2">Select Tags for {selectedSubject} (Optional):</h4>
             <div className="flex flex-wrap gap-2 mb-4">
@@ -554,7 +573,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
             <Button onClick={() => setVideoLectureStep('videos')}>Show Videos <ChevronRight size={16} className="ml-1"/></Button>
           </div>
         )}
-        {videoLectureStep === 'videos' && selectedSubject && ( /* ... existing video lecture UI ... */ <div>
+        {videoLectureStep === 'videos' && selectedSubject && ( <div>
             <Button size="sm" variant="ghost" onClick={() => setVideoLectureStep('tags')} className="mb-2">← Back to Tags</Button>
             <h4 className="font-semibold mb-2">Select Video Lecture for {selectedSubject}:</h4>
             <Input 
