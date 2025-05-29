@@ -97,7 +97,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuthModal }) => 
           >
             {t('landing.heroSubtitle')}
           </motion.p>
-          <motion.div variants={textVariant(0.8)}>
+          <motion.div variants={textVariant(0.8)} className="flex justify-center"> {/* Centered button */}
             <Button size="lg" onClick={onOpenAuthModal} className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg transform hover:scale-105 transition-transform duration-300 px-10 py-4 text-lg">
               {t('landing.heroCta')} <ArrowRight size={20} className="ml-2" />
             </Button>
@@ -183,18 +183,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuthModal }) => 
           className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center"
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-6">{t('landing.ctaTitle')}</h2>
-          <p className="text-lg md:text-xl text-blue-100 mb-10">
+          <p className="text-lg md:text-xl text-blue-200 mb-10"> {/* Changed text color */}
             {t('landing.ctaSubtitle')}
           </p>
-          <Button size="lg" onClick={onOpenAuthModal} className="bg-white text-blue-600 hover:bg-gray-100 shadow-lg transform hover:scale-105 transition-transform duration-300 px-10 py-4 text-lg font-semibold">
-            {t('landing.ctaButton')} <Zap size={20} className="ml-2" />
-          </Button>
+          <div className="flex justify-center"> {/* Centered button */}
+            <Button size="lg" onClick={onOpenAuthModal} className="bg-white text-blue-600 hover:bg-gray-100 shadow-lg transform hover:scale-105 transition-transform duration-300 px-10 py-4 text-lg font-semibold">
+              {t('landing.ctaButton')} <Zap size={20} className="ml-2" />
+            </Button>
+          </div>
         </motion.div>
       </section>
 
       {/* Footer */}
       <footer className="py-8 bg-gray-800 text-gray-400 text-center">
-        <p>&copy; {new Date().getFullYear()} {t('landing.footerText', { appName: "PW Study Buddy" })}. {t('landing.footerRights')}</p>
+        <p>&copy; {new Date().getFullYear()} {t('landing.footerText', { appName: "Study Room" })}. {t('landing.footerRights')}</p>
       </footer>
     </div>
   );

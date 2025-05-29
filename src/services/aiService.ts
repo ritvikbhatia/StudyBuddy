@@ -402,7 +402,7 @@ class AIService {
   }
 
   async generateAudioFromText(text: string): Promise<Blob> {
-    const apiUrl = 'https://abf8-223-181-126-21.ngrok-free.app/generate-audio-from-text';
+    const apiUrl = 'https://d0bb-69-48-236-229.ngrok-free.app/v1/generate-audio-from-text';
     const payload = { text };
     try {
       const response = await axios.post<Blob>(apiUrl, payload, {

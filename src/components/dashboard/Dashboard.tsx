@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, BookOpen, Trophy, Users, Clock, Target, Zap, Award, Calendar, ArrowRight, Youtube as YoutubeIcon, PlayCircle, RadioTower } from 'lucide-react';
+import { TrendingUp, BookOpen, Trophy, Users, Clock, Target, Zap, Award, Calendar, RadioTower, Youtube as YoutubeIcon } from 'lucide-react'; // Removed ArrowRight
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { storageService } from '../../services/storageService';
-import { NavParamsType } from '../layout/Navbar'; // Import NavParamsType
+import { NavParamsType } from '../layout/Navbar'; 
 import { useTranslation } from '../../hooks/useTranslation';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
 interface DashboardProps {
-  onTabChange: (tab: string, navParams?: NavParamsType) => void; // Use NavParamsType
+  onTabChange: (tab: string, navParams?: NavParamsType) => void; 
 }
 
 interface ChannelThumbnail {
@@ -27,8 +27,8 @@ interface ChannelThumbnails {
 }
 
 interface ChannelData {
-  id: number; // Assuming API returns number, but channel_id is string for YouTube
-  channel_id: string; // This is the actual YouTube channel ID
+  id: number; 
+  channel_id: string; 
   channel_description: string;
   custom_url: string;
   channel_thumbnails: ChannelThumbnails;
@@ -50,11 +50,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
   useEffect(() => {
     loadDashboardData();
     fetchRecommendedChannels();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]); 
 
   const loadDashboardData = () => {
-    const activities = storageService.getRecentActivities(5);
-    const topics = storageService.getTrendingTopics(5);
+    const activities = storageService.getRecentActivities(3); // Limit to 3
+    const topics = storageService.getTrendingTopics(4); // Limit to 4
     const todayTime = storageService.getTodayStudyTime();
     const weeklyTime = storageService.getWeeklyStudyTime();
 
@@ -71,11 +72,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
       if (response.data && response.data.status_code === 200 && response.data.data) {
         setRecommendedChannels(response.data.data);
       } else {
-        toast.error('Failed to fetch recommended channels.');
+        toast.error(t('toast.failedToFetchChannels'));
         console.error('API error fetching channels:', response.data);
       }
     } catch (error) {
-      toast.error('Error fetching recommended channels.');
+      toast.error(t('toast.errorFetchingChannels'));
       console.error('Network error fetching channels:', error);
     } finally {
       setLoadingChannels(false);
@@ -83,8 +84,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
   };
 
   const handleChannelClick = (channel: ChannelData) => {
-    onTabChange('dashboard', { // Keep current tab or choose a neutral one, App.tsx will handle view
-      channelId: channel.channel_id, // Use channel_id from API
+    onTabChange('dashboard', { 
+      channelId: channel.channel_id, 
       channelName: channel.channel_name,
     });
   };
@@ -160,7 +161,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
         className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl p-8"
       >
         <h1 className="text-3xl font-bold mb-2">
-          {t('dashboard.welcomeMessage', { name: user?.name || 'Student' })}
+          {t('dashboard.welcomeMessage', { name: user?.name || t('dashboard.defaultStudentName') })}
         </h1>
         <p className="text-blue-100 mb-4">
           {t('dashboard.welcomeSubtitle')}
@@ -168,7 +169,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
         <div className="flex items-center space-x-4 text-sm">
           <div className="flex items-center space-x-1">
             <Calendar size={16} />
-            <span>{t('dashboard.joinedDate', { date: user?.joinedAt ? new Date(user.joinedAt).toLocaleDateString() : 'Recently' })}</span>
+            <span>{t('dashboard.joinedDate', { date: user?.joinedAt ? new Date(user.joinedAt).toLocaleDateString() : t('dashboard.joinedRecently') })}</span>
           </div>
           <div className="flex items-center space-x-1">
             <Clock size={16} />
@@ -188,7 +189,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
               transition={{ delay: index * 0.1 }}
               className="h-full"
             >
-              <Card className="p-6 text-center h-full">
+              <Card className="p-6 text-center h-full flex flex-col justify-center">
                 <div className={`w-12 h-12 ${stat.bgColor} rounded-full flex items-center justify-center mx-auto mb-4`}>
                   <Icon className={stat.color} size={24} />
                 </div>
@@ -202,7 +203,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
         })}
       </div>
 
-      {/* Recommended Channels */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -211,10 +211,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
         <Card className="p-6">
           <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
             <RadioTower className="mr-2 text-red-600" size={24} />
-            Recommended Channels
+            {t('dashboard.recommendedChannelsTitle')}
           </h3>
           {loadingChannels ? (
-            <div className="text-center py-8 text-gray-500">Loading channels...</div>
+            <div className="text-center py-8 text-gray-500">{t('common.loading')}</div>
           ) : recommendedChannels.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {recommendedChannels.map((channel) => (
@@ -222,7 +222,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
                   key={channel.id} 
                   hover 
                   onClick={() => handleChannelClick(channel)}
-                  className="p-3 cursor-pointer flex flex-col items-center text-center"
+                  className="p-3 cursor-pointer flex flex-col items-center text-center h-full"
                 >
                   <img 
                     src={channel.channel_thumbnails.medium.url} 
@@ -233,33 +233,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
                     {channel.channel_name}
                   </h5>
                   <p className="text-xs text-blue-600 truncate w-full">{channel.custom_url}</p>
-                  <Button size="sm" variant="ghost" className="w-full mt-2 text-blue-600 hover:bg-blue-50 text-xs">
-                    <YoutubeIcon size={14} className="mr-1.5" /> View Channel
+                  <Button size="sm" variant="ghost" className="w-full mt-auto text-blue-600 hover:bg-blue-50 text-xs">
+                    <YoutubeIcon size={14} className="mr-1.5" /> {t('dashboard.viewChannelButton')}
                   </Button>
                 </Card>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">No channels to recommend at the moment.</div>
+            <div className="text-center py-8 text-gray-500">{t('dashboard.noChannelsToRecommend')}</div>
           )}
         </Card>
       </motion.div>
 
-
-      <div className="grid lg:grid-cols-2 gap-8">
+      <div className="grid lg:grid-cols-2 gap-8 lg:items-stretch"> 
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4 }}
+          className="h-full" 
         >
-          <Card className="p-6">
+          <Card className="p-6 h-full flex flex-col"> 
             <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
               <TrendingUp className="mr-2 text-blue-600" size={24} />
-              Recent Activity
+              {t('dashboard.recentActivityTitle')}
             </h3>
             {recentActivity.length > 0 ? (
-              <div className="space-y-4">
-                {recentActivity.map((activity) => (
+              <div className="space-y-4 flex-grow"> 
+                {recentActivity.slice(0,3).map((activity) => (
                   <div key={activity.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-start space-x-3">
                       {getActivityIcon(activity.type)}
@@ -279,9 +279,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-gray-500 flex-grow flex flex-col justify-center items-center">
                 <BookOpen className="mx-auto mb-2" size={48} />
-                <p>No activities yet. Start studying to see your progress!</p>
+                <p>{t('dashboard.noActivitiesMessage')}</p>
               </div>
             )}
           </Card>
@@ -291,15 +291,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.5 }}
+          className="h-full" 
         >
-          <Card className="p-6">
+          <Card className="p-6 h-full flex flex-col"> 
             <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
               <BookOpen className="mr-2 text-green-600" size={24} />
-              Your Study Topics
+              {t('dashboard.yourStudyTopicsTitle')}
             </h3>
             {trendingTopics.length > 0 ? (
-              <div className="space-y-3">
-                {trendingTopics.map((topic, index) => (
+              <div className="space-y-3 flex-grow"> 
+                {trendingTopics.slice(0,4).map((topic, index) => (
                   <motion.div
                     key={topic}
                     initial={{ opacity: 0, x: 20 }}
@@ -308,7 +309,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
                     onClick={() => onTabChange('my-topics')}
                   >
-                    <span className="font-medium text-gray-900">{topic}</span>
+                    <span className="font-medium text-gray-900 truncate" title={topic}>{topic}</span>
                     <div className="flex items-center space-x-2">
                       <span className="text-sm text-gray-600">#{index + 1}</span>
                       <TrendingUp className="text-green-500" size={16} />
@@ -317,64 +318,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-gray-500 flex-grow flex flex-col justify-center items-center">
                 <Target className="mx-auto mb-2" size={48} />
-                <p>Start studying to see your favorite topics!</p>
+                <p>{t('dashboard.noTopicsMessage')}</p>
               </div>
             )}
           </Card>
         </motion.div>
       </div>
-
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7 }}
-      >
-        <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="h-full">
-            <Card hover onClick={() => onTabChange('study')} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
-              <div>
-                <BookOpen className="mx-auto mb-4 text-blue-600" size={48} />
-                <h4 className="font-bold text-gray-900 mb-2">Start Studying</h4>
-                <p className="text-gray-600 text-sm mb-4">Upload content and generate study materials</p>
-              </div>
-              <Button size="sm" className="w-full mt-auto">
-                Get Started
-                <ArrowRight size={16} className="ml-2" />
-              </Button>
-            </Card>
-          </div>
-          <div className="h-full">
-            <Card hover onClick={() => onTabChange('study', { studyParams: { inputType: 'text', content: '', topic: 'General Knowledge Quiz' }})} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
-              <div>
-                <Trophy className="mx-auto mb-4 text-yellow-600" size={48} />
-                <h4 className="font-bold text-gray-900 mb-2">Take Quiz</h4>
-                <p className="text-gray-600 text-sm mb-4">Test your knowledge with AI-generated quizzes</p>
-              </div>
-              <Button size="sm" className="w-full mt-auto">
-                Start Quiz
-                <ArrowRight size={16} className="ml-2" />
-              </Button>
-            </Card>
-          </div>
-          <div className="h-full">
-            <Card hover onClick={() => onTabChange('battle')} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
-              <div>
-                <Users className="mx-auto mb-4 text-purple-600" size={48} />
-                <h4 className="font-bold text-gray-900 mb-2">Join Battle</h4>
-                <p className="text-gray-600 text-sm mb-4">Challenge friends in knowledge battles</p>
-              </div>
-              <Button size="sm" className="w-full mt-auto">
-                Find Battle
-                <ArrowRight size={16} className="ml-2" />
-              </Button>
-            </Card>
-          </div>
-        </div>
-      </motion.div>
 
       {user && user.points > 0 && (
         <motion.div
@@ -385,14 +336,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
           <Card className="p-6 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Great Progress! 🎉</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{t('dashboard.progressTitle')} 🎉</h3>
                 <p className="text-gray-600">
-                  You're only {1000 - (user.points % 1000)} points away from level {user.level + 1}!
+                  {t('dashboard.pointsToNextLevel', { points: (1000 - (user.points % 1000)), level: (user.level + 1) })}
                 </p>
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-green-600">{user.points % 1000}/1000</div>
-                <div className="text-sm text-gray-600">Points to next level</div>
+                <div className="text-sm text-gray-600">{t('dashboard.pointsToNextLevelLabel')}</div>
               </div>
             </div>
             <div className="mt-4 bg-gray-200 rounded-full h-2">

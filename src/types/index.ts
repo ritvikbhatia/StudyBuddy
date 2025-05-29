@@ -13,6 +13,7 @@ export interface User {
   examPreferences?: string[]; 
   preferredLanguage?: string; 
   isProfileComplete?: boolean;
+  pwCoins?: number; // Added for PW Coins
 }
 
 export interface StudyMaterial {
@@ -262,3 +263,18 @@ export type ActiveToolModalType =
   | 'listen-summary' 
   | 'recommendations'
   | null;
+
+// Types for Latest Live Video API
+export interface LatestLiveVideoData {
+  stream_id: string;
+  video_id: string;
+}
+
+export interface LatestLiveVideoApiResponse {
+  status_code: number;
+  data: LatestLiveVideoData;
+  totalCount: number;
+  message: string;
+  error_messages: string[];
+  error: boolean;
+}

@@ -10,10 +10,12 @@ import { BattlePage } from './components/battle/BattlePage';
 import { CommunityPage } from './components/community/CommunityPage';
 import { LiveClassesPage } from './components/live/LiveClassesPage';
 import { ChannelVideosPage } from './components/channel/ChannelVideosPage';
-import { LandingPage } from './components/landing/LandingPage'; // Import LandingPage
-import { AuthModal } from './components/auth/AuthModal'; // Import AuthModal
+import { LandingPage } from './components/landing/LandingPage';
+import { AuthModal } from './components/auth/AuthModal';
 import { StudyMaterial, Quiz, InputContent } from './types'; 
 import { useTranslation } from './hooks/useTranslation';
+import { UpcomingLiveClassesPage } from './components/live/UpcomingLiveClassesPage';
+import { RedeemPage } from './components/redeem/RedeemPage'; // New import
 
 interface TopicDetailsData {
   topic: string;
@@ -34,7 +36,7 @@ export type InitialStudyDataType = {
 } | null;
 
 const InnerApp = () => {
-  const { user, isAuthenticated, preferredLanguage } = useAuth(); // Added isAuthenticated
+  const { user, isAuthenticated, preferredLanguage } = useAuth();
   const { loadingTranslations } = useTranslation(); 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [currentStudyResponse, setCurrentStudyResponse] = useState<{
@@ -49,7 +51,8 @@ const InnerApp = () => {
   const [initialStudyData, setInitialStudyData] = useState<InitialStudyDataType>(null);
   const [selectedChannelInfo, setSelectedChannelInfo] = useState<{ id: string; name: string; } | null>(null);
   const [currentBattleParams, setCurrentBattleParams] = useState<{ topic: string; context: string; } | null>(null); 
-  const [showAuthModal, setShowAuthModal] = useState(false); // State for AuthModal
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [currentLiveClassParams, setCurrentLiveClassParams] = useState<{ videoId: string; streamKey: string; } | null>(null);
 
   useEffect(() => {
     if (!loadingTranslations && preferredLanguage) {
@@ -63,17 +66,23 @@ const InnerApp = () => {
     setInitialStudyData(null); 
     setSelectedChannelInfo(null);
     setCurrentBattleParams(null); 
+    // Do not clear currentLiveClassParams here if tab is 'live-classes-player' to allow direct navigation to player
+    if (tab !== 'live-classes-player') {
+      setCurrentLiveClassParams(null); 
+    }
+
 
     if (navParams?.channelId && navParams?.channelName) {
       setSelectedChannelInfo({ id: navParams.channelId, name: navParams.channelName });
+      // No need to set activeTab here if we want channel page to be primary view
     } else if (navParams?.studyParams) {
       setInitialStudyData(navParams.studyParams);
-      setActiveTab(tab);
+      setActiveTab(tab); 
     } else if (navParams?.battleParams) { 
       setCurrentBattleParams(navParams.battleParams);
       setActiveTab(tab); 
     } else {
-      setActiveTab(tab);
+      setActiveTab(tab); 
     }
   };
 
@@ -94,6 +103,11 @@ const InnerApp = () => {
     setActiveTab('study'); 
   };
 
+  const handleJoinLiveClassFromUpcoming = (videoId: string, streamKey: string) => {
+    setCurrentLiveClassParams({ videoId, streamKey });
+    setActiveTab('live-classes-player'); 
+  };
+
   if (loadingTranslations) {
     return (
       <div className="flex justify-center items-center h-screen bg-gray-50">
@@ -102,7 +116,7 @@ const InnerApp = () => {
     );
   }
   
-  if (!isAuthenticated || !user) { // Show LandingPage if not authenticated
+  if (!isAuthenticated || !user) {
     return (
       <>
         <LandingPage onOpenAuthModal={() => setShowAuthModal(true)} />
@@ -112,8 +126,7 @@ const InnerApp = () => {
     );
   }
   
-  // Authenticated user view
-  if (selectedChannelInfo) {
+  if (selectedChannelInfo) { // If a channel is selected, show its videos page regardless of activeTab
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar activeTab={activeTab} onTabChange={handleTabChange} onOpenAuthModal={() => setShowAuthModal(true)} />
@@ -123,7 +136,7 @@ const InnerApp = () => {
             channelName={selectedChannelInfo.name}
             onBack={() => {
               setSelectedChannelInfo(null);
-              // Optionally set activeTab back to 'dashboard' or previous tab
+              // Optionally, revert to dashboard or previous tab
               // setActiveTab('dashboard'); 
             }}
             onVideoSelect={handleVideoSelectFromChannelPage}
@@ -135,8 +148,11 @@ const InnerApp = () => {
     );
   }
 
-
   const renderActiveTab = () => {
+    if (activeTab === 'live-classes-player' && currentLiveClassParams) {
+      return <LiveClassesPage youtubeVideoId={currentLiveClassParams.videoId} liveStreamKey={currentLiveClassParams.streamKey} />;
+    }
+
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard onTabChange={handleTabChange} />;
@@ -193,8 +209,10 @@ const InnerApp = () => {
         return <BattlePage battleParams={currentBattleParams} />; 
       case 'community':
         return <CommunityPage />;
-      case 'live-classes':
-        return <LiveClassesPage />;
+      case 'live-classes': 
+        return <UpcomingLiveClassesPage onJoinLiveClass={handleJoinLiveClassFromUpcoming} />;
+      case 'redeem': // New case for RedeemPage
+        return <RedeemPage />;
       default:
         return <Dashboard onTabChange={handleTabChange} />;
     }

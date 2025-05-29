@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Youtube as YoutubeIcon, MessageSquare, Send, ChevronRight, Bot, User as UserIcon, Play, Pause, Loader2, AlertTriangle, PlayCircle as PlayCircleIcon } from 'lucide-react';
+import { MessageSquare, Send, ChevronRight, Bot, User as UserIcon, Play, Pause, Loader2, AlertTriangle, PlayCircle as PlayCircleIcon, Languages } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth } from '../../context/AuthContext';
@@ -9,11 +9,14 @@ import { InteractivePanel, LeaderboardEntry, MCQ } from './InteractivePanel';
 import { faker } from '@faker-js/faker';
 import { contentService, PwVideo } from '../../services/contentService';
 import axios from 'axios';
-import { ApiTranscriptItem, LiveTranscriptionApiResponse, Question as AppQuestionType } from '../../types'; // Import AppQuestionType
+import { ApiTranscriptItem, LiveTranscriptionApiResponse, Question as AppQuestionType } from '../../types'; 
 import { aiService } from '../../services/aiService';
+import { useTranslation } from '../../hooks/useTranslation';
 
-const YOUTUBE_VIDEO_ID = 'sqdwl8nfUXA';
-const LIVE_STREAM_KEY_FOR_TRANSCRIPTS = 'live_stream_key';
+interface LiveClassesPageProps {
+  youtubeVideoId: string;
+  liveStreamKey: string;
+}
 
 interface ChatMessage {
   id: string;
@@ -22,7 +25,19 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export const LiveClassesPage: React.FC = () => {
+// Define language options locally or import from a shared constants file
+const languageOptionsForTranscript = [
+  { value: 'english', labelKey: 'languageOptions.en' },
+  { value: 'hindi', labelKey: 'languageOptions.hi' },
+  { value: 'marathi', labelKey: 'languageOptions.mr' },
+  { value: 'tamil', labelKey: 'languageOptions.ta' },
+  { value: 'telugu', labelKey: 'languageOptions.te' },
+  { value: 'bengali', labelKey: 'languageOptions.bn' },
+];
+
+
+export const LiveClassesPage: React.FC<LiveClassesPageProps> = ({ youtubeVideoId, liveStreamKey }) => {
+  const { t } = useTranslation();
   const { user, preferredLanguage } = useAuth();
   const [currentTimeInSeconds, setCurrentTimeInSeconds] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false); 
@@ -33,19 +48,20 @@ export const LiveClassesPage: React.FC = () => {
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [liveChatId, setLiveChatId] = useState<string | null>(null); 
 
-  const [currentLiveMCQ, setCurrentLiveMCQ] = useState<MCQ | null>(null); // Initialize as null
+  const [currentLiveMCQ, setCurrentLiveMCQ] = useState<MCQ | null>(null);
   const [isFetchingMCQ, setIsFetchingMCQ] = useState<boolean>(false);
   const [mcqError, setMcqError] = useState<string | null>(null);
   const [liveMCQTimer, setLiveMCQTimer] = useState(60);
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [newQuestionIndicator, setNewQuestionIndicator] = useState(false);
-  const [userQuizScore, setUserQuizScore] = useState(0);
 
   const [recommendedVideos, setRecommendedVideos] = useState<PwVideo[]>([]);
   
   const [liveTranscripts, setLiveTranscripts] = useState<ApiTranscriptItem[]>([]);
   const [loadingTranscripts, setLoadingTranscripts] = useState<boolean>(true);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [selectedTranscriptLanguage, setSelectedTranscriptLanguage] = useState<string>(preferredLanguage || 'english');
+
 
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
   const videoPlayerRef = useRef<HTMLDivElement>(null);
@@ -53,9 +69,18 @@ export const LiveClassesPage: React.FC = () => {
   const mcqTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchTranscripts = async () => {
-    if (liveTranscripts.length === 0 && !transcriptError && !loadingTranscripts) setLoadingTranscripts(true);
+    if (!liveStreamKey) {
+        setTranscriptError(t('liveClasses.noStreamKeyError'));
+        setLoadingTranscripts(false);
+        return;
+    }
+    if (liveTranscripts.length === 0 && !transcriptError && !loadingTranscripts) {
+        setLoadingTranscripts(true);
+    }
+
     try {
-      const response = await axios.get<LiveTranscriptionApiResponse>(`https://qbg-backend-stage.penpencil.co/qbg/internal/get-transcripts?stream_id=${LIVE_STREAM_KEY_FOR_TRANSCRIPTS}`);
+      const apiUrl = `https://qbg-backend-stage.penpencil.co/qbg/internal/get-transcripts?stream_id=${liveStreamKey}&language=${selectedTranscriptLanguage}&translate=true`;
+      const response = await axios.get<LiveTranscriptionApiResponse>(apiUrl);
       
       if (response.data && response.data.status_code === 200 && 
           typeof response.data.data === 'object' && 
@@ -64,15 +89,20 @@ export const LiveClassesPage: React.FC = () => {
         setLiveTranscripts(response.data.data.transcripts);
         setTranscriptError(null); 
       } else {
-        if (!transcriptError) setTranscriptError('Transcripts data is not in the expected format.');
-        setLiveTranscripts([]); 
+        if (!transcriptError || liveTranscripts.length > 0) { 
+             setTranscriptError(t('liveClasses.transcriptFormatError'));
+        }
         console.error('API error or malformed transcripts data:', response.data);
       }
     } catch (err) {
       console.error('Network error fetching transcripts:', err);
-      if (!transcriptError) setTranscriptError('Could not load live transcripts. Retrying...');
+      if (!transcriptError || liveTranscripts.length > 0) {
+        setTranscriptError(t('liveClasses.transcriptLoadError'));
+      }
     } finally {
-      setLoadingTranscripts(false);
+      if (loadingTranscripts && (liveTranscripts.length === 0 && !transcriptError)) { // Only turn off initial global loading
+          setLoadingTranscripts(false);
+      }
     }
   };
 
@@ -80,38 +110,37 @@ export const LiveClassesPage: React.FC = () => {
     setIsFetchingMCQ(true);
     setMcqError(null);
     try {
-      const context = liveTranscripts.map(t => t.text).join('\n') || 'Current live class discussion.';
-      const questions: AppQuestionType[] = await aiService.generateLiveQuestionsAPI(context, 1, preferredLanguage || 'english');
+      const context = liveTranscripts.map(t => t.text).join('\n') || t('liveClasses.defaultQuizContext');
+      // Use selectedTranscriptLanguage for quiz generation as well for consistency
+      const questions: AppQuestionType[] = await aiService.generateLiveQuestionsAPI(context, 1, selectedTranscriptLanguage); 
       
       if (questions.length > 0) {
         const apiQuestion = questions[0];
-        // Transform AppQuestionType to MCQ format
         const newMcq: MCQ = {
-          id: parseInt(apiQuestion.id.split('-').pop() || '0', 10) || Date.now(), // Ensure ID is number
+          id: parseInt(apiQuestion.id.split('-').pop() || '0', 10) || Date.now(),
           question: apiQuestion.question,
           options: apiQuestion.options || [],
           correctAnswerIndex: typeof apiQuestion.correctAnswer === 'number' ? apiQuestion.correctAnswer : 0,
-          explanation: apiQuestion.explanation || "No explanation available.",
+          explanation: apiQuestion.explanation || t('liveClasses.noExplanation'),
         };
         setCurrentLiveMCQ(newMcq);
         setNewQuestionIndicator(true);
         setTimeout(() => setNewQuestionIndicator(false), 3000);
-        setLiveMCQTimer(60); // Reset timer for new question
+        setLiveMCQTimer(60); 
       } else {
-        setMcqError("No new question available at the moment.");
+        setMcqError(t('liveClasses.noNewQuestion'));
       }
     } catch (error: any) {
       console.error("Error fetching live MCQ:", error);
-      setMcqError(error.message || "Failed to fetch question.");
+      setMcqError(error.message || t('liveClasses.fetchQuestionError'));
     } finally {
       setIsFetchingMCQ(false);
     }
   };
   
   useEffect(() => {
-    const newChatId = user ? `live-user-${user.id}-${Date.now()}` : `live-guest-${Date.now()}`;
     setLiveChatId(faker.string.uuid()); 
-    setChatMessages([{ id: 'live-initial-ai', type: 'ai', text: 'Welcome to the Live Doubt Solver! Ask anything about the ongoing class.', timestamp: new Date() }]);
+    setChatMessages([{ id: 'live-initial-ai', type: 'ai', text: t('liveClasses.doubtSolverWelcome'), timestamp: new Date() }]);
 
     const mockLeaderboard: LeaderboardEntry[] = Array.from({ length: 10 }).map((_, i) => ({
       id: faker.string.uuid(),
@@ -125,15 +154,17 @@ export const LiveClassesPage: React.FC = () => {
     setRecommendedVideos(contentService.getAllPwVideos().slice(0, 3));
 
     fetchTranscripts(); 
+    if (transcriptPollIntervalRef.current) clearInterval(transcriptPollIntervalRef.current);
     transcriptPollIntervalRef.current = setInterval(fetchTranscripts, 5000); 
 
-    if (isVideoPlaying) fetchNextLiveQuestion(); // Fetch initial question if video is playing
+    if (isVideoPlaying) fetchNextLiveQuestion();
 
     return () => {
       if (transcriptPollIntervalRef.current) clearInterval(transcriptPollIntervalRef.current);
       if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
     };
-  }, [user]); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveStreamKey, selectedTranscriptLanguage]); // Add selectedTranscriptLanguage to dependencies
 
   useEffect(() => {
     let videoTimerId: NodeJS.Timeout;
@@ -146,13 +177,13 @@ export const LiveClassesPage: React.FC = () => {
   }, [isVideoPlaying]);
 
   useEffect(() => {
-    if (mcqTimerRef.current) clearInterval(mcqTimerRef.current); // Clear existing timer
-    if (isVideoPlaying && currentLiveMCQ) { // Only start timer if video is playing and there's an MCQ
+    if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
+    if (isVideoPlaying && currentLiveMCQ) { 
       mcqTimerRef.current = setInterval(() => {
         setLiveMCQTimer(prev => {
           if (prev === 1) {
-            fetchNextLiveQuestion(); // Fetch new question when timer hits 0
-            return 60; // Reset timer
+            fetchNextLiveQuestion(); 
+            return 60; 
           }
           return prev - 1;
         });
@@ -161,7 +192,8 @@ export const LiveClassesPage: React.FC = () => {
     return () => {
       if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
     };
-  }, [isVideoPlaying, currentLiveMCQ]); // Rerun if video playing state or current MCQ changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVideoPlaying, currentLiveMCQ]); 
   
   useEffect(() => {
     if (chatMessagesContainerRef.current) {
@@ -171,8 +203,8 @@ export const LiveClassesPage: React.FC = () => {
 
   const handleChatSend = async () => {
     if (!chatInput.trim() || !user || !liveChatId) {
-      if(!user) toast.error("Please log in to use the chat.");
-      if(!liveChatId) toast.error("Chat session not initialized.");
+      if(!user) toast.error(t('toast.loginToChat'));
+      if(!liveChatId) toast.error(t('toast.chatNotInitialized'));
       return;
     }
     const newUserMessage: ChatMessage = { id: Date.now().toString(), type: 'user', text: chatInput, timestamp: new Date() };
@@ -182,16 +214,15 @@ export const LiveClassesPage: React.FC = () => {
     setIsAiTyping(true);
 
     try {
-      const context = liveTranscripts.map(t => t.text).join('\n') || 'Live class content is being discussed.';
+      const context = liveTranscripts.map(t => t.text).join('\n') || t('liveClasses.defaultChatContext');
       const aiResponseText = await aiService.getAIChatResponse(context, currentInput, liveChatId);
       const newAiMessage: ChatMessage = { id: (Date.now() + 1).toString(), type: 'ai', text: aiResponseText, timestamp: new Date() };
       setChatMessages(prev => [...prev, newAiMessage]);
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to get AI response for live class. Please try again.';
+      const errorMessage = error.message || t('toast.aiResponseFailedLive');
       toast.error(errorMessage);
-      const aiErrorMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: `Sorry, I couldn't process that: ${errorMessage}`, timestamp: new Date() };
-      // @ts-ignore 
-      setChatMessages(prev => [...prev, aiErrorMessage]);
+      // @ts-ignore
+      setChatMessages(prev => [...prev, { id: (Date.now() + 1).toString(), type: 'ai' as const, text: t('liveClasses.aiErrorResponse', { errorMessage }), timestamp: new Date() }]);
     } finally {
       setIsAiTyping(false);
     }
@@ -200,7 +231,7 @@ export const LiveClassesPage: React.FC = () => {
   const togglePlayPause = () => {
     const newPlayState = !isVideoPlaying;
     setIsVideoPlaying(newPlayState);
-    if (newPlayState && !currentLiveMCQ && !isFetchingMCQ) { // If video starts playing and no MCQ, fetch one
+    if (newPlayState && !currentLiveMCQ && !isFetchingMCQ) { 
         fetchNextLiveQuestion();
     }
   };
@@ -208,8 +239,7 @@ export const LiveClassesPage: React.FC = () => {
   const handleQuizAnswerSubmit = (isCorrect: boolean) => {
     if (isCorrect) {
       const points = 10;
-      setUserQuizScore(prev => prev + points);
-      toast.success(`Correct! +${points} points`);
+      toast.success(t('liveClasses.mcqCorrectToast', { points }));
 
       setLeaderboardData(prevLeaderboard => {
         const userEntryIndex = prevLeaderboard.findIndex(entry => entry.name === (user?.name || "You"));
@@ -234,21 +264,20 @@ export const LiveClassesPage: React.FC = () => {
         return updatedLeaderboard.sort((a, b) => b.score - a.score);
       });
     } else {
-      toast.error("Incorrect. Try the next one!");
+      toast.error(t('liveClasses.mcqIncorrectToast'));
     }
-    // Fetch next question immediately after an answer
     fetchNextLiveQuestion();
   };
 
   const handleRecommendedVideoClick = (video: PwVideo) => {
-    toast(`Navigating to study: ${video.title}`);
+    toast(t('liveClasses.studyVideoToast', { videoTitle: video.title }));
   };
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Live Class: Advanced React Patterns</h1>
-        <p className="text-gray-600">Join our interactive session. Engage with transcripts, quizzes, and AI chat.</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('liveClasses.pageTitle')}</h1>
+        <p className="text-gray-600">{t('liveClasses.pageSubtitle')}</p>
       </motion.div>
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
@@ -257,7 +286,7 @@ export const LiveClassesPage: React.FC = () => {
             <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-2xl">
               <iframe
                 className="w-full h-full"
-                src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=0&modestbranding=1&rel=0&controls=1`}
+                src={`https://www.youtube.com/embed/${youtubeVideoId}?autoplay=0&modestbranding=1&rel=0&controls=1`}
                 title="YouTube video player"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -270,8 +299,23 @@ export const LiveClassesPage: React.FC = () => {
                         {isVideoPlaying ? <Pause size={20} /> : <Play size={20} />}
                     </Button>
                     <div className="text-sm text-gray-600">
-                        Simulated Time: {Math.floor(currentTimeInSeconds / 60)}:{(currentTimeInSeconds % 60).toString().padStart(2, '0')}
+                        {t('liveClasses.simulatedTimeLabel')}: {Math.floor(currentTimeInSeconds / 60)}:{(currentTimeInSeconds % 60).toString().padStart(2, '0')}
                     </div>
+                </div>
+                 <div className="flex items-center space-x-2">
+                    <label htmlFor="transcript-lang-select" className="text-sm text-gray-600 sr-only">{t('liveClasses.selectTranscriptLanguageLabel')}</label>
+                    <Languages size={16} className="text-gray-500" />
+                    <select
+                        id="transcript-lang-select"
+                        value={selectedTranscriptLanguage}
+                        onChange={(e) => setSelectedTranscriptLanguage(e.target.value)}
+                        className="text-sm p-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        aria-label={t('liveClasses.selectTranscriptLanguageLabel')}
+                    >
+                        {languageOptionsForTranscript.map(lang => (
+                            <option key={lang.value} value={lang.value}>{t(lang.labelKey)}</option>
+                        ))}
+                    </select>
                 </div>
             </div>
           </Card>
@@ -316,7 +360,7 @@ export const LiveClassesPage: React.FC = () => {
             <Card className="p-0 flex flex-col flex-grow">
               <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
                 <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                  <Bot size={20} className="mr-2 text-blue-600" /> AI Doubt Solver
+                  <Bot size={20} className="mr-2 text-blue-600" /> {t('liveClasses.aiDoubtSolverTitle')}
                 </h2>
                 <Button variant="ghost" size="sm" onClick={() => setIsChatOpen(false)} className="lg:hidden p-1">
                   <ChevronRight size={20} />
@@ -355,7 +399,7 @@ export const LiveClassesPage: React.FC = () => {
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
-                    placeholder={user ? "Ask a question..." : "Login to chat"}
+                    placeholder={user ? t('liveClasses.chatPlaceholderUser') : t('liveClasses.chatPlaceholderGuest')}
                     className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     disabled={!user || !liveChatId}
                   />
@@ -368,7 +412,7 @@ export const LiveClassesPage: React.FC = () => {
             
             <div className="p-4 border-t bg-white">
                 <h3 className="text-md font-semibold text-gray-800 mb-3 flex items-center">
-                    <PlayCircleIcon size={18} className="mr-2 text-red-600"/> Recommended Videos
+                    <PlayCircleIcon size={18} className="mr-2 text-red-600"/> {t('liveClasses.recommendedVideosTitle')}
                 </h3>
                 <div className="space-y-3">
                     {recommendedVideos.map(video => (
@@ -388,7 +432,7 @@ export const LiveClassesPage: React.FC = () => {
                                         className="text-blue-600 hover:bg-blue-50 px-1 py-0.5 text-xs mt-1"
                                         onClick={() => handleRecommendedVideoClick(video)}
                                     >
-                                        Study this video
+                                        {t('liveClasses.studyThisVideoButton')}
                                     </Button>
                                 </div>
                             </div>
@@ -404,7 +448,7 @@ export const LiveClassesPage: React.FC = () => {
             variant="primary"
             onClick={() => setIsChatOpen(true)}
             className="fixed bottom-6 right-6 z-30 lg:hidden rounded-full p-3 shadow-lg flex items-center justify-center"
-            aria-label="Open AI Chat"
+            aria-label={t('liveClasses.openChatAriaLabel')}
           >
             <Bot size={24} />
           </Button>

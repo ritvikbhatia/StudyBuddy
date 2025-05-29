@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, User, Trophy, BookOpen, Users, LogOut, Settings, ListChecks, Radio, Menu as MenuIcon, X as XIcon } from 'lucide-react'; 
+import { Brain, User, Trophy, BookOpen, Users, LogOut, Settings, ListChecks, Radio, Menu as MenuIcon, X as XIcon, Coins } from 'lucide-react'; 
 import { useAuth } from '../../context/AuthContext';
 import { InitialStudyDataType } from '../../App';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -60,6 +60,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
     setMobileMenuOpen(false); // Close mobile menu on tab click
   };
 
+  const handleRedeemClick = () => {
+    onTabChange('redeem');
+    setShowUserMenu(false);
+    setMobileMenuOpen(false);
+  };
+
   return (
     <>
       <nav className="bg-white shadow-lg border-b border-gray-200 sticky top-0 z-50">
@@ -86,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
                           : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                       }`}
                     >
-                      <Icon size={18} className="mr-1.5" /> {/* Added margin */}
+                      <Icon size={18} className="mr-1.5" />
                       <span>{t(tab.labelKey)}</span>
                     </motion.button>
                   );
@@ -117,7 +123,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
                     </>
                   ) : (
                     <>
-                      <User size={20} className="text-gray-700 mr-1.5"/> {/* Added margin */}
+                      <User size={20} className="text-gray-700 mr-1.5"/>
                       <span className="font-medium text-gray-700">{t('navbar.login')}</span>
                     </>
                   )}
@@ -133,14 +139,21 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
                       onClick={handleOpenSettings}
                       className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2.5"
                     >
-                      <Settings size={16} className="mr-1.5" /> {/* Added margin */}
+                      <Settings size={16} className="mr-1.5" />
                       <span>{t('common.settings')}</span>
+                    </button>
+                    <button 
+                      onClick={handleRedeemClick}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2.5"
+                    >
+                      <Coins size={16} className="mr-1.5" />
+                      <span>{t('navbar.redeem')}</span>
                     </button>
                     <button
                       onClick={handleLogout}
                       className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2.5"
                     >
-                      <LogOut size={16} className="mr-1.5" /> {/* Added margin */}
+                      <LogOut size={16} className="mr-1.5" />
                       <span>{t('common.logout')}</span>
                     </button>
                   </motion.div>
@@ -155,7 +168,6 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
           </div>
         </div>
 
-        {/* Mobile Navigation Menu */}
         <AnimatePresence>
         {mobileMenuOpen && (
             <motion.div 
@@ -177,12 +189,11 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
                           : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                       }`}
                     >
-                      <Icon size={20} className="mr-1.5" /> {/* Added margin */}
+                      <Icon size={20} className="mr-1.5" />
                       <span>{t(tab.labelKey)}</span>
                     </button>
                   );
                 })}
-                 {/* Mobile menu specific settings & logout */}
                 <div className="pt-2 mt-2 border-t border-gray-200">
                    {isAuthenticated && (
                      <>
@@ -192,6 +203,13 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
                         >
                             <Settings size={20} className="mr-1.5" />
                             <span>{t('common.settings')}</span>
+                        </button>
+                        <button 
+                            onClick={handleRedeemClick}
+                            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                        >
+                            <Coins size={20} className="mr-1.5" />
+                            <span>{t('navbar.redeem')}</span>
                         </button>
                         <button
                             onClick={handleLogout}
@@ -208,7 +226,6 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAu
         )}
         </AnimatePresence>
       </nav>
-      {/* Settings Modal */}
       <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
     </>
   );
