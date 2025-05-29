@@ -53,8 +53,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
   }, [user]); 
 
   const loadDashboardData = () => {
-    const activities = storageService.getRecentActivities(2);
-    const topics = storageService.getTrendingTopics(4);
+    const activities = storageService.getRecentActivities(5);
+    const topics = storageService.getTrendingTopics(5);
     const todayTime = storageService.getTodayStudyTime();
     const weeklyTime = storageService.getWeeklyStudyTime();
 
@@ -325,6 +325,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
           </Card>
         </motion.div>
       </div>
+
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7 }}
+      >
+        <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="h-full">
+            <Card hover onClick={() => onTabChange('study')} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
+              <div>
+                <BookOpen className="mx-auto mb-4 text-blue-600" size={48} />
+                <h4 className="font-bold text-gray-900 mb-2">Start Studying</h4>
+                <p className="text-gray-600 text-sm mb-4">Upload content and generate study materials</p>
+              </div>
+              <Button size="sm" className="w-full mt-auto">
+                Get Started
+                <ArrowRight size={16} className="ml-2" />
+              </Button>
+            </Card>
+          </div>
+          <div className="h-full">
+            <Card hover onClick={() => onTabChange('study', { studyParams: { inputType: 'text', content: '', topic: 'General Knowledge Quiz' }})} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
+              <div>
+                <Trophy className="mx-auto mb-4 text-yellow-600" size={48} />
+                <h4 className="font-bold text-gray-900 mb-2">Take Quiz</h4>
+                <p className="text-gray-600 text-sm mb-4">Test your knowledge with AI-generated quizzes</p>
+              </div>
+              <Button size="sm" className="w-full mt-auto">
+                Start Quiz
+                <ArrowRight size={16} className="ml-2" />
+              </Button>
+            </Card>
+          </div>
+          <div className="h-full">
+            <Card hover onClick={() => onTabChange('battle')} className="p-6 text-center cursor-pointer h-full flex flex-col justify-between">
+              <div>
+                <Users className="mx-auto mb-4 text-purple-600" size={48} />
+                <h4 className="font-bold text-gray-900 mb-2">Join Battle</h4>
+                <p className="text-gray-600 text-sm mb-4">Challenge friends in knowledge battles</p>
+              </div>
+              <Button size="sm" className="w-full mt-auto">
+                Find Battle
+                <ArrowRight size={16} className="ml-2" />
+              </Button>
+            </Card>
+          </div>
+        </div>
+      </motion.div>
 
       {user && user.points > 0 && (
         <motion.div

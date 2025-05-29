@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Brain, User, Trophy, BookOpen, Users, LogOut, Settings, ListChecks, Youtube as YoutubeIcon } from 'lucide-react'; 
+import { Brain, User, Trophy, BookOpen, Users, LogOut, Settings, ListChecks, Youtube as YoutubeIcon, Radio } from 'lucide-react'; 
 import { useAuth } from '../../context/AuthContext';
-import { AuthModal } from '../auth/AuthModal';
+// No longer need AuthModal import here if managed by App.tsx
 import { InitialStudyDataType } from '../../App';
 import { useTranslation } from '../../hooks/useTranslation';
 
@@ -16,19 +16,19 @@ export type NavParamsType = {
 interface NavbarProps {
   activeTab: string;
   onTabChange: (tab: string, navParams?: NavParamsType) => void; 
+  onOpenAuthModal: () => void; 
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, onOpenAuthModal }) => {
   const { t } = useTranslation();
   const { user, logout, isAuthenticated } = useAuth();
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const tabs = [
     { id: 'dashboard', labelKey: 'navbar.dashboard', icon: Brain },
     { id: 'study', labelKey: 'navbar.study', icon: BookOpen },
-    { id: 'my-topics', labelKey: 'navbar.myTopics', icon: ListChecks }, 
-    { id: 'live-classes', labelKey: 'navbar.liveClasses', icon: YoutubeIcon },
+    { id: 'my-topics', labelKey: 'navbar.topics', icon: ListChecks }, // Changed labelKey
+    { id: 'live-classes', labelKey: 'navbar.live', icon: Radio }, // Changed labelKey and icon for variety
     { id: 'battle', labelKey: 'navbar.battle', icon: Users }, 
     { id: 'community', labelKey: 'navbar.community', icon: Users }, 
   ];
@@ -37,7 +37,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
     if (isAuthenticated) {
       setShowUserMenu(!showUserMenu);
     } else {
-      setShowAuthModal(true);
+      onOpenAuthModal(); 
     }
   };
 
@@ -152,8 +152,6 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
           </div>
         </div>
       </nav>
-
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </>
   );
 };

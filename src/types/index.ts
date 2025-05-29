@@ -242,4 +242,13 @@ export interface ApiLiveQuestionsResponseTopLevel {
   error: boolean;
 }
 
-export type ActiveToolModalType = 'flashcards' | 'mindmap' | 'summary' | 'quiz' | 'notes' | 'share' | 'listen-summary' | null;
+export type ActiveToolModalType = 
+  | 'flashcards' 
+  | 'mindmap' 
+  | 'summary' 
+  | 'quiz' 
+  | 'notes' 
+  | 'share' 
+  | 'listen-summary' 
+  | 'recommendations' // Added recommendations
+  | null;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Maximize, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType, Loader2, Volume2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Maximize, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType, Loader2, Volume2, Sparkles } from 'lucide-react'; // Added Sparkles
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -92,6 +92,12 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   
   const [recommendedVideo, setRecommendedVideo] = useState<PwVideo | null>(null);
   const videoPlayerRef = useRef<HTMLDivElement>(null);
+
+  const mockBatches = [
+    "Lakshya JEE 2025", "Arjuna NEET 2025", "UPSC Prahar 2026", 
+    "Yakeen Dropper Batch (NEET)", "Prayas Dropper Batch (JEE)", "Banking Foundation 2.0",
+    "SSC CGL Achievers Batch", "GATE CSE Rankers Batch"
+  ];
 
 
   useEffect(() => {
@@ -217,14 +223,14 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     setActiveToolModal('listen-summary');
     try {
       const audioBlob = await aiService.generateAudioFromText(summary.content);
-      if (audioPlayerSrc) { // Revoke previous object URL if exists
+      if (audioPlayerSrc) { 
         URL.revokeObjectURL(audioPlayerSrc);
       }
       const newAudioSrc = URL.createObjectURL(audioBlob);
       setAudioPlayerSrc(newAudioSrc);
     } catch (error: any) {
       toast.error(error.message || 'Failed to generate audio for summary.');
-      setActiveToolModal(null); // Close modal on error
+      setActiveToolModal(null); 
     } finally {
       setIsFetchingAudio(false);
     }
@@ -287,8 +293,8 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       setShareableLink(link);
     }
     if (tool === 'listen-summary') {
-      handleListenToSummary(); // This will open the modal internally on success
-      return; // Prevent setting activeToolModal directly here
+      handleListenToSummary(); 
+      return; 
     }
     setActiveToolModal(tool);
   };
@@ -376,13 +382,14 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   };
 
   const interactiveTools = [
-    { id: 'flashcards' as ActiveToolModalType, label: 'Flashcards', icon: CheckSquare, disabled: !flashcardMaterial },
-    { id: 'mindmap' as ActiveToolModalType, label: 'Mind Map', icon: Brain, disabled: !mindMapMaterial },
     { id: 'summary' as ActiveToolModalType, label: 'Read Summary', icon: FileTextIcon, disabled: !summaryMaterial },
     { id: 'listen-summary' as ActiveToolModalType, label: 'Listen Summary', icon: Volume2, disabled: !summaryMaterial || isFetchingAudio },
+    { id: 'flashcards' as ActiveToolModalType, label: 'Flashcards', icon: CheckSquare, disabled: !flashcardMaterial },
+    { id: 'mindmap' as ActiveToolModalType, label: 'Mind Map', icon: Brain, disabled: !mindMapMaterial },
     { id: 'quiz' as ActiveToolModalType, label: 'Quiz', icon: Trophy, disabled: isGeneratingQuiz },
     { id: 'notes' as ActiveToolModalType, label: 'Notes', icon: Edit3, disabled: !user },
     { id: 'battle' as ActiveToolModalType, label: 'Battle', icon: Swords, disabled: !onTabChange || !summaryMaterial }, 
+    { id: 'recommendations' as ActiveToolModalType, label: 'Recommendations', icon: Sparkles, disabled: false },
   ];
 
   return (
@@ -670,6 +677,21 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
           </Button>
         </div>
       </Modal>
+
+      <Modal key="recommendations-modal" isOpen={activeToolModal === 'recommendations'} onClose={() => setActiveToolModal(null)} title="Recommended Batches">
+        <div className="space-y-3">
+            <p className="text-sm text-gray-600">Based on your current study topic "{data.topic}", you might be interested in these PW Batches:</p>
+            <ul className="list-disc list-inside space-y-1 pl-2">
+                {mockBatches.map((batch, index) => (
+                    <li key={index} className="text-gray-700 hover:text-blue-600 cursor-pointer" onClick={() => toast.info(`Explore ${batch}`)}>
+                        {batch}
+                    </li>
+                ))}
+            </ul>
+            <p className="text-xs text-gray-500 mt-2">Note: These are general recommendations. Actual batch suitability may vary.</p>
+        </div>
+      </Modal>
+
       </AnimatePresence>
     </div>
   );

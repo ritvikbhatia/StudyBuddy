@@ -10,6 +10,8 @@ import { BattlePage } from './components/battle/BattlePage';
 import { CommunityPage } from './components/community/CommunityPage';
 import { LiveClassesPage } from './components/live/LiveClassesPage';
 import { ChannelVideosPage } from './components/channel/ChannelVideosPage';
+import { LandingPage } from './components/landing/LandingPage'; // Import LandingPage
+import { AuthModal } from './components/auth/AuthModal'; // Import AuthModal
 import { StudyMaterial, Quiz, InputContent } from './types'; 
 import { useTranslation } from './hooks/useTranslation';
 
@@ -32,7 +34,7 @@ export type InitialStudyDataType = {
 } | null;
 
 const InnerApp = () => {
-  const { preferredLanguage } = useAuth();
+  const { user, isAuthenticated, preferredLanguage } = useAuth(); // Added isAuthenticated
   const { loadingTranslations } = useTranslation(); 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [currentStudyResponse, setCurrentStudyResponse] = useState<{
@@ -47,6 +49,7 @@ const InnerApp = () => {
   const [initialStudyData, setInitialStudyData] = useState<InitialStudyDataType>(null);
   const [selectedChannelInfo, setSelectedChannelInfo] = useState<{ id: string; name: string; } | null>(null);
   const [currentBattleParams, setCurrentBattleParams] = useState<{ topic: string; context: string; } | null>(null); 
+  const [showAuthModal, setShowAuthModal] = useState(false); // State for AuthModal
 
   useEffect(() => {
     if (!loadingTranslations && preferredLanguage) {
@@ -99,20 +102,34 @@ const InnerApp = () => {
     );
   }
   
+  if (!isAuthenticated || !user) { // Show LandingPage if not authenticated
+    return (
+      <>
+        <LandingPage onOpenAuthModal={() => setShowAuthModal(true)} />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+  
+  // Authenticated user view
   if (selectedChannelInfo) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Navbar activeTab={activeTab} onTabChange={handleTabChange} />
+        <Navbar activeTab={activeTab} onTabChange={handleTabChange} onOpenAuthModal={() => setShowAuthModal(true)} />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <ChannelVideosPage
             channelId={selectedChannelInfo.id}
             channelName={selectedChannelInfo.name}
             onBack={() => {
               setSelectedChannelInfo(null);
+              // Optionally set activeTab back to 'dashboard' or previous tab
+              // setActiveTab('dashboard'); 
             }}
             onVideoSelect={handleVideoSelectFromChannelPage}
           />
         </main>
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
         <Toaster position="top-right" />
       </div>
     );
@@ -185,10 +202,11 @@ const InnerApp = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar activeTab={activeTab} onTabChange={handleTabChange} />
+      <Navbar activeTab={activeTab} onTabChange={handleTabChange} onOpenAuthModal={() => setShowAuthModal(true)} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {renderActiveTab()}
       </main>
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
       <Toaster position="top-right" />
     </div>
   );
