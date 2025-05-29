@@ -1,26 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Maximize, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType, Loader2, Volume2, Sparkles } from 'lucide-react'; // Added Sparkles
+import { ArrowLeft, MessageSquare, PlayCircle, BookOpen, Brain, Share2, Trophy, Clock, ChevronRight, Send, Bot, User as UserIcon, AlertTriangle, Languages, Film, Youtube as YoutubeIcon, FileText as FileTextIcon, CheckSquare, Zap, Menu, X, Edit3, Copy, Swords, Image as ImageIconLucide, FileType, Loader2, Volume2, Sparkles, Video as VideoLucideIcon, Mic as MicLucideIcon } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { StudyMaterial, Quiz, InputContent, User, Question as AppQuestionType, ActiveToolModalType } from '../../types';
 import { aiService } from '../../services/aiService';
 import { storageService } from '../../services/storageService';
-import { contentService, PwVideo } from '../../services/contentService';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import { NavParamsType } from '../layout/Navbar';
 import { faker } from '@faker-js/faker';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface StudyMaterialResponseProps {
   data: {
     topic: string;
     materials: StudyMaterial[];
     quiz: Quiz | null;
-    content: string; 
     outputLanguage: string;
-    originalInput: InputContent;
+    originalInput: InputContent; 
   };
   onBack: () => void;
   onNewStudy: () => void;
@@ -52,6 +51,7 @@ const getYoutubeEmbedUrl = (url: string): string | null => {
 
 
 export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ data, onBack, onNewStudy, isTopicView = false, onTabChange }) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [activeToolModal, setActiveToolModal] = useState<ActiveToolModalType>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -75,22 +75,21 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   
-  const lang = data?.outputLanguage;
+  const lang = data?.originalInput?.metadata?.outputLanguage || data?.outputLanguage; 
   const effectiveOutputLanguage = (lang && lang.trim() !== '') ? lang : 'english';
   
-  const languageLabel = effectiveOutputLanguage.charAt(0).toUpperCase() + effectiveOutputLanguage.slice(1);
+  const languageLabel = t(`languageOptions.${effectiveOutputLanguage}`, effectiveOutputLanguage.charAt(0).toUpperCase() + effectiveOutputLanguage.slice(1));
   
   const [aiTutorChatId, setAiTutorChatId] = useState<string | null>(null); 
   const initialChatMessageText = isTopicView
-    ? `Viewing materials for ${data.topic} (in ${languageLabel}). Ask me about this topic!`
-    : `Hi! I'm your AI tutor for ${data.topic} (in ${languageLabel}). How can I help you learn better?`;
+    ? t('studyMaterialResponse.aiTutorInitialTopicView', { topic: data.topic, language: languageLabel })
+    : t('studyMaterialResponse.aiTutorInitialNewStudy', { topic: data.topic, language: languageLabel });
   const [chatMessages, setChatMessages] = useState<Array<{ id: string; type: 'user' | 'ai'; content: string; timestamp: Date }>>([
     { id: 'initial-ai-message', type: 'ai', content: initialChatMessageText, timestamp: new Date() }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isAITyping, setIsAITyping] = useState(false);
   
-  const [recommendedVideo, setRecommendedVideo] = useState<PwVideo | null>(null);
   const videoPlayerRef = useRef<HTMLDivElement>(null);
 
   const mockBatches = [
@@ -111,31 +110,34 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     
      setChatMessages([{ id: 'initial-ai-message-reset', type: 'ai', content: 
         isTopicView 
-        ? `Viewing materials for ${data.topic} (in ${languageLabel}). Ask me about this topic!`
-        : `Hi! I'm your AI tutor for ${data.topic} (in ${languageLabel}). How can I help you learn better?`, 
+        ? t('studyMaterialResponse.aiTutorInitialTopicView', { topic: data.topic, language: languageLabel })
+        : t('studyMaterialResponse.aiTutorInitialNewStudy', { topic: data.topic, language: languageLabel }), 
      timestamp: new Date() }]);
 
-  }, [data.topic, user, isTopicView, languageLabel]); 
+  }, [data.topic, user, isTopicView, languageLabel, t]); 
 
   useEffect(() => {
-    if (data.originalInput.type !== 'youtube' && data.originalInput.type !== 'video' && data.originalInput.type !== 'videolecture') {
-      const videos = contentService.searchPwVideos(data.topic);
-      if (videos.length > 0) {
-        setRecommendedVideo(videos[0]);
-      } else {
-        setRecommendedVideo(contentService.getAllPwVideos()[0]); 
-      }
-    } else {
-      setRecommendedVideo(null); 
-    }
     setLocalQuizData(data.quiz);
-  }, [data.topic, data.originalInput.type, data.quiz]);
+  }, [data.quiz]);
 
-  // Cleanup for audio object URL
   useEffect(() => {
+    // Cleanup blob URL for original input if it was a blob
+    const currentOriginalContent = data.originalInput.content;
+    if (currentOriginalContent && currentOriginalContent.startsWith('blob:')) {
+      return () => {
+        URL.revokeObjectURL(currentOriginalContent);
+        console.log("Revoked blob URL for original input:", currentOriginalContent);
+      };
+    }
+  }, [data.originalInput.content]);
+
+
+  useEffect(() => {
+    // Cleanup blob URL for listen-summary audio
     return () => {
       if (audioPlayerSrc) {
         URL.revokeObjectURL(audioPlayerSrc);
+        console.log("Revoked blob URL for listen-summary audio:", audioPlayerSrc);
       }
     };
   }, [audioPlayerSrc]);
@@ -147,7 +149,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     setQuizAnswers({});
     setQuizCompleted(false);
     setQuizScore(0);
-    storageService.addActivity({ type: 'quiz', title: `Started quiz: ${quizToStart.title}`, points: 0, metadata: { topic: data.topic, language: effectiveOutputLanguage } });
+    storageService.addActivity({ type: 'quiz', title: t('activity.quizStarted', { quizTitle: quizToStart.title }), points: 0, metadata: { topic: data.topic, language: effectiveOutputLanguage } });
   };
 
   const handleQuizAnswer = (questionId: string, answer: any) => {
@@ -181,14 +183,14 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
     setQuizScore(score);
     setQuizCompleted(true);
     storageService.saveQuizResult({ quizId: currentQuiz.id, quizTitle: currentQuiz.title, topic: data.topic, score, totalPoints, answers: quizAnswers, completedAt: new Date(), language: effectiveOutputLanguage });
-    storageService.addActivity({ type: 'quiz', title: `Completed quiz: ${currentQuiz.title}`, score: `${score}/${totalPoints}`, points: score, metadata: { topic: data.topic, language: effectiveOutputLanguage } });
+    storageService.addActivity({ type: 'quiz', title: t('activity.quizCompleted', { quizTitle: currentQuiz.title }), score: `${score}/${totalPoints}`, points: score, metadata: { topic: data.topic, language: effectiveOutputLanguage } });
     storageService.updateUserStats(score, 'quiz');
-    toast.success(`Quiz completed! You scored ${score}/${totalPoints} points.`);
+    toast.success(t('toast.quizCompleted', { score, totalPoints }));
   };
 
   const handleChatSend = async () => {
     if (!chatInput.trim() || !aiTutorChatId) {
-      if(!aiTutorChatId) toast.error("Chat session not initialized. Please wait.");
+      if(!aiTutorChatId) toast.error(t('toast.chatNotInitialized'));
       return;
     }
     const userMessage = { id: Date.now().toString(), type: 'user' as const, content: chatInput, timestamp: new Date() };
@@ -204,9 +206,9 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       const aiMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: aiResponseText, timestamp: new Date() };
       setChatMessages(prev => [...prev, aiMessage]);
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to get AI response. Please try again.';
+      const errorMessage = error.message || t('toast.aiResponseFailed');
       toast.error(errorMessage);
-      const aiErrorMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: `Sorry, I couldn't process that: ${errorMessage}`, timestamp: new Date() };
+      const aiErrorMessage = { id: (Date.now() + 1).toString(), type: 'ai' as const, content: t('studyMaterialResponse.aiErrorResponse', { errorMessage }), timestamp: new Date() };
       setChatMessages(prev => [...prev, aiErrorMessage]);
     } finally {
       setIsAITyping(false);
@@ -216,7 +218,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   const handleListenToSummary = async () => {
     const summary = data.materials.find(m => m.type === 'summary');
     if (!summary || typeof summary.content !== 'string' || !summary.content.trim()) {
-      toast.error('No summary content available to listen to.');
+      toast.error(t('toast.noSummaryToListen'));
       return;
     }
     setIsFetchingAudio(true);
@@ -229,7 +231,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       const newAudioSrc = URL.createObjectURL(audioBlob);
       setAudioPlayerSrc(newAudioSrc);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to generate audio for summary.');
+      toast.error(error.message || t('toast.audioGenerationFailed'));
       setActiveToolModal(null); 
     } finally {
       setIsFetchingAudio(false);
@@ -261,7 +263,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
           if (questions.length > 0) {
             const newQuiz: Quiz = {
               id: `live-quiz-${Date.now()}`,
-              title: `${data.topic} Quiz (Generated)`,
+              title: t('studyMaterialResponse.generatedQuizTitle', { topic: data.topic }),
               topic: data.topic,
               questions,
               difficulty: 'medium',
@@ -271,13 +273,13 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
             };
             setLocalQuizData(newQuiz);
             handleQuizStart(newQuiz);
-            toast.success("Quiz generated!");
+            toast.success(t('toast.quizGenerated'));
           } else {
-            toast.error("Could not generate quiz questions.");
+            toast.error(t('toast.quizGenerationFailedNoQuestions'));
             setLocalQuizData(null); 
           }
         } catch (error: any) {
-          toast.error(error.message || "Failed to generate quiz.");
+          toast.error(error.message || t('toast.quizGenerationFailed'));
           setLocalQuizData(null);
         } finally {
           setIsGeneratingQuiz(false);
@@ -302,17 +304,17 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   const handleSaveNote = () => {
     if (user) {
       storageService.saveUserNote(user.id, data.topic, currentNoteContent);
-      toast.success('Note saved!');
+      toast.success(t('toast.noteSaved'));
       setActiveToolModal(null);
     } else {
-      toast.error('Please log in to save notes.');
+      toast.error(t('toast.loginToSaveNotes'));
     }
   };
 
   const handleCopyToClipboard = () => {
     navigator.clipboard.writeText(shareableLink)
-      .then(() => toast.success('Link copied to clipboard!'))
-      .catch(() => toast.error('Failed to copy link.'));
+      .then(() => toast.success(t('toast.linkCopied')))
+      .catch(() => toast.error(t('toast.linkCopyFailed')));
   };
 
   const handleBattleButtonClick = () => {
@@ -321,7 +323,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       const context = typeof summaryMaterialContent === 'string' ? summaryMaterialContent : data.topic; 
       onTabChange('battle', { battleParams: { topic: data.topic, context } });
     } else {
-      toast("Navigation to Battle page is not available in this context.");
+      toast(t('toast.battleNavigationUnavailable'));
     }
   };
 
@@ -332,64 +334,95 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
   const renderOriginalInputContent = () => {
     const { type, content, metadata } = data.originalInput;
 
+    if (!content) {
+      return <div className="bg-gray-200 h-full flex items-center justify-center rounded-lg"><p>{t('studyMaterialResponse.noPreviewAvailable')}</p></div>;
+    }
+
     switch (type) {
       case 'text':
         return (
           <div className="bg-gray-100 p-4 rounded-lg h-full overflow-y-auto">
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Original Text Content:</h4>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('studyMaterialResponse.originalTextContent')}</h4>
             <pre className="whitespace-pre-wrap text-sm text-gray-800">{content}</pre>
           </div>
         );
       case 'youtube':
         const embedUrl = getYoutubeEmbedUrl(content);
         return embedUrl ? (
-          <iframe className="w-full h-full rounded-lg" src={embedUrl} title={metadata?.title || "YouTube video player"} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-        ) : <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><YoutubeIcon size={48} className="mb-2 text-red-500" /><p className="font-semibold text-center">Invalid or unrenderable YouTube URL:<br/>{content}</p></div>;
-      case 'image':
-        return (
-          <div className="bg-gray-100 p-2 rounded-lg h-full flex items-center justify-center overflow-hidden">
-            <img src={content} alt={metadata?.fileName || data.topic || 'Uploaded Image'} className="max-w-full max-h-full object-contain rounded"/>
-          </div>
-        );
+          <iframe className="w-full h-full rounded-lg" src={embedUrl} title={metadata?.title || t('studyMaterialResponse.youtubePlayerTitle')} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+        ) : <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><YoutubeIcon size={48} className="mb-2 text-red-500" /><p className="font-semibold text-center">{t('studyMaterialResponse.invalidYoutubeUrl', { url: content })}</p></div>;
+      
       case 'document':
-        if (metadata?.documentType === 'pdf' && content) {
-          const isLikelyBlocked = content.includes('drive.google.com') && !content.includes('/preview');
-          if (isLikelyBlocked) {
-             return <div className="bg-gray-200 p-4 rounded-lg h-full flex flex-col items-center justify-center"><FileType size={48} className="mb-2 text-gray-500" /><p className="font-semibold">{metadata?.fileName || 'PDF Document'}</p><p className="text-sm text-red-600 text-center">Direct embedding for this PDF might be restricted. <a href={content} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Open PDF in new tab</a>.</p></div>;
+        if (content.startsWith('blob:') || content.startsWith('http')) {
+          if (metadata?.documentType === 'image') {
+            return (
+              <div className="bg-gray-100 p-2 rounded-lg h-full flex items-center justify-center overflow-hidden">
+                <img src={content} alt={metadata?.fileName || data.topic || t('studyMaterialResponse.uploadedImageAlt')} className="max-w-full max-h-full object-contain rounded"/>
+              </div>
+            );
           }
+          if (metadata?.documentType === 'pdf') {
+            return (
+              <iframe src={content} className="w-full h-full rounded-lg" title={metadata?.fileName || data.topic || t('studyMaterialResponse.pdfDocument')}>
+                <p className="p-4">{t('studyMaterialResponse.pdfNotSupported')} <a href={content} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{t('studyMaterialResponse.downloadPdf')}</a></p>
+              </iframe>
+            );
+          }
+        }
+        return <div className="bg-gray-200 p-4 rounded-lg h-full flex flex-col items-center justify-center"><FileType size={48} className="mb-2 text-gray-500" /><p className="font-semibold">{metadata?.fileName || content}</p><p className="text-sm text-gray-600">{t('studyMaterialResponse.documentTypeGeneric', { type: metadata?.documentType || 'File' })}</p></div>;
+
+      case 'audio':
+        if (content.startsWith('blob:') || content.startsWith('http')) {
           return (
-            <iframe src={content} className="w-full h-full rounded-lg" title={metadata?.fileName || data.topic || 'PDF Document'}>
-              <p className="p-4">Your browser does not support PDFs. Please download the PDF to view it: <a href={content} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Download PDF</a></p>
-            </iframe>
+            <div className="bg-gray-100 p-4 rounded-lg h-full flex flex-col items-center justify-center">
+              <MicLucideIcon size={48} className="mb-2 text-blue-500" />
+              <p className="font-semibold mb-2">{metadata?.fileName || t('studyMaterialResponse.audioPlaybackTitle')}</p>
+              <audio controls src={content} className="w-full max-w-sm">
+                {t('studyMaterialResponse.audioNotSupported')}
+              </audio>
+            </div>
           );
         }
-        return <div className="bg-gray-200 p-4 rounded-lg h-full flex flex-col items-center justify-center"><FileType size={48} className="mb-2 text-gray-500" /><p className="font-semibold">{metadata?.fileName || content}</p><p className="text-sm text-gray-600">Document: {metadata?.documentType || 'Generic'} (Preview N/A)</p></div>;
-      case 'videolecture':
-        return <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><Film size={48} className="mb-2" /><p className="font-semibold">{metadata?.title || content}</p><p className="text-sm">Video Lecture (Playback N/A)</p></div>;
+        return <div className="bg-gray-200 p-4 rounded-lg h-full flex flex-col items-center justify-center"><MicLucideIcon size={48} className="mb-2 text-gray-500" /><p className="font-semibold">{metadata?.fileName || content}</p><p className="text-sm text-gray-600">{t('studyMaterialResponse.uploadedAudioPlaybackNA')}</p></div>;
+      
       case 'video':
-         return <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><VideoIcon size={48} className="mb-2" /><p className="font-semibold">{metadata?.fileName || content}</p><p className="text-sm">Uploaded Video (Playback N/A)</p></div>;
-      case 'audio':
-         return <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><Mic size={48} className="mb-2" /><p className="font-semibold">{metadata?.fileName || content}</p><p className="text-sm">Audio Content (Playback N/A)</p></div>;
-      default:
-        if (recommendedVideo) {
-            const recEmbedUrl = getYoutubeEmbedUrl(recommendedVideo.youtubeUrl);
-            return recEmbedUrl ? (
-                <iframe className="w-full h-full rounded-lg" src={recEmbedUrl} title={recommendedVideo.title} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-            ) : <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><YoutubeIcon size={48} className="mb-2" /><p className="font-semibold">{recommendedVideo.title}</p><p className="text-sm">Recommended Video</p></div>;
+        if (content.startsWith('blob:') || content.startsWith('http')) {
+           return (
+            <div className="bg-gray-100 p-4 rounded-lg h-full flex flex-col items-center justify-center">
+              <VideoLucideIcon size={48} className="mb-2 text-blue-500" />
+              <p className="font-semibold mb-2">{metadata?.fileName || t('studyMaterialResponse.videoPlaybackTitle')}</p>
+              <video controls src={content} className="w-full max-w-md rounded-lg">
+                {t('studyMaterialResponse.videoNotSupported')}
+              </video>
+            </div>
+          );
         }
-        return <div className="bg-gray-200 h-full flex items-center justify-center rounded-lg"><p>No specific preview for this content type.</p></div>;
+        return <div className="bg-gray-200 p-4 rounded-lg h-full flex flex-col items-center justify-center"><VideoLucideIcon size={48} className="mb-2 text-gray-500" /><p className="font-semibold">{metadata?.fileName || content}</p><p className="text-sm text-gray-600">{t('studyMaterialResponse.uploadedVideoPlaybackNA')}</p></div>;
+
+      case 'videolecture':
+        return <div className="bg-gray-800 text-white p-4 rounded-lg h-full flex flex-col items-center justify-center"><Film size={48} className="mb-2" /><p className="font-semibold">{metadata?.title || content}</p><p className="text-sm">{t('studyMaterialResponse.videoLecturePlaybackNA')}</p></div>;
+      
+      default: // Fallback for image type if not handled by document
+        if (type === 'image' && (content.startsWith('blob:') || content.startsWith('http'))) {
+             return (
+              <div className="bg-gray-100 p-2 rounded-lg h-full flex items-center justify-center overflow-hidden">
+                <img src={content} alt={metadata?.fileName || data.topic || t('studyMaterialResponse.uploadedImageAlt')} className="max-w-full max-h-full object-contain rounded"/>
+              </div>
+            );
+        }
+        return <div className="bg-gray-200 h-full flex items-center justify-center rounded-lg"><p>{t('studyMaterialResponse.noPreviewAvailable')}</p></div>;
     }
   };
 
   const interactiveTools = [
-    { id: 'summary' as ActiveToolModalType, label: 'Read Summary', icon: FileTextIcon, disabled: !summaryMaterial },
-    { id: 'listen-summary' as ActiveToolModalType, label: 'Listen Summary', icon: Volume2, disabled: !summaryMaterial || isFetchingAudio },
-    { id: 'flashcards' as ActiveToolModalType, label: 'Flashcards', icon: CheckSquare, disabled: !flashcardMaterial },
-    { id: 'mindmap' as ActiveToolModalType, label: 'Mind Map', icon: Brain, disabled: !mindMapMaterial },
-    { id: 'quiz' as ActiveToolModalType, label: 'Quiz', icon: Trophy, disabled: isGeneratingQuiz },
-    { id: 'notes' as ActiveToolModalType, label: 'Notes', icon: Edit3, disabled: !user },
-    { id: 'battle' as ActiveToolModalType, label: 'Battle', icon: Swords, disabled: !onTabChange || !summaryMaterial }, 
-    { id: 'recommendations' as ActiveToolModalType, label: 'Recommendations', icon: Sparkles, disabled: false },
+    { id: 'summary' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.readSummary', icon: FileTextIcon, disabled: !summaryMaterial },
+    { id: 'listen-summary' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.listenSummary', icon: Volume2, disabled: !summaryMaterial || isFetchingAudio },
+    { id: 'flashcards' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.flashcards', icon: CheckSquare, disabled: !flashcardMaterial },
+    { id: 'mindmap' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.mindMap', icon: Brain, disabled: !mindMapMaterial },
+    { id: 'quiz' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.quiz', icon: Trophy, disabled: isGeneratingQuiz },
+    { id: 'notes' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.notes', icon: Edit3, disabled: !user },
+    { id: 'battle' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.battle', icon: Swords, disabled: !onTabChange || !summaryMaterial }, 
+    { id: 'recommendations' as ActiveToolModalType, labelKey: 'studyMaterialResponse.tools.recommendations', icon: Sparkles, disabled: false },
   ];
 
   return (
@@ -402,13 +435,13 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
             <div className="flex items-center text-sm text-gray-500">
               <Languages size={14} className="mr-1.5" /><span>{languageLabel}</span>
               <span className="mx-1.5">•</span>
-              <span>{isTopicView ? "Viewing saved materials" : "Complete study package"}</span>
+              <span>{isTopicView ? t('studyMaterialResponse.viewingSavedMaterials') : t('studyMaterialResponse.completeStudyPackage')}</span>
             </div>
           </div>
         </div>
         <div className="flex space-x-2 self-start sm:self-center">
-          <Button variant="outline" size="md" onClick={onNewStudy}>{isTopicView ? `Generate New for ${data.topic}` : "Start New Study"}</Button>
-          <Button variant="primary" size="md" onClick={() => openToolModal('share')}><Share2 size={16} className="mr-2" /> Share</Button>
+          <Button variant="outline" size="md" onClick={onNewStudy}>{isTopicView ? t('studyMaterialResponse.generateNewForTopic', { topic: data.topic }) : t('studyMaterialResponse.startNewStudy')}</Button>
+          <Button variant="primary" size="md" onClick={() => openToolModal('share')}><Share2 size={16} className="mr-2" /> {t('studyMaterialResponse.tools.share')}</Button>
         </div>
       </div>
 
@@ -420,7 +453,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
             </div>
           </Card>
           <Card className="p-4 flex-shrink-0 interactive-tools-card">
-            <h3 className="text-md font-semibold text-gray-800 mb-3">Interactive Tools</h3>
+            <h3 className="text-md font-semibold text-gray-800 mb-3">{t('studyMaterialResponse.interactiveToolsTitle')}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {interactiveTools.map(tool => {
                 const Icon = tool.icon;
@@ -434,7 +467,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
                     className="flex flex-col items-center justify-center h-20 sm:h-24 text-xs sm:text-sm"
                     loading={(tool.id === 'quiz' && isGeneratingQuiz) || (tool.id === 'listen-summary' && isFetchingAudio)}
                   >
-                    <Icon size={20} className="mb-1" /> {tool.label}
+                    <Icon size={20} className="mb-1" /> {t(tool.labelKey)}
                   </Button>
                 );
               })}
@@ -465,7 +498,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
             <Card className="p-0 flex flex-col flex-grow h-full">
               <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
                 <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                  <Bot size={20} className="mr-2 text-blue-600" /> AI Tutor
+                  <Bot size={20} className="mr-2 text-blue-600" /> {t('studyMaterialResponse.aiTutorTitle')}
                 </h2>
                 <Button variant="ghost" size="sm" onClick={() => setIsChatOpen(false)} className="lg:hidden p-1">
                   <ChevronRight size={20} />
@@ -492,7 +525,7 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
                     value={chatInput} 
                     onChange={(e) => setChatInput(e.target.value)} 
                     onKeyPress={(e) => e.key === 'Enter' && handleChatSend()} 
-                    placeholder={data.topic ? "Ask about the materials..." : "Generate materials to enable AI Tutor."} 
+                    placeholder={data.topic ? t('studyMaterialResponse.aiTutorPlaceholder') : t('studyMaterialResponse.aiTutorDisabledPlaceholder')} 
                     className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
                     disabled={!data.topic || !aiTutorChatId} 
                   />
@@ -507,13 +540,13 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
       </div>
       
       {!isChatOpen && (
-        <Button variant="primary" onClick={() => setIsChatOpen(true)} className="fixed bottom-6 right-6 z-30 lg:hidden rounded-full p-3 shadow-lg flex items-center justify-center" aria-label="Open AI Chat">
+        <Button variant="primary" onClick={() => setIsChatOpen(true)} className="fixed bottom-6 right-6 z-30 lg:hidden rounded-full p-3 shadow-lg flex items-center justify-center" aria-label={t('studyMaterialResponse.openAIChatLabel')}>
           <MessageSquare size={24} />
         </Button>
       )}
 
       <AnimatePresence>
-      <Modal key="flashcards-modal" isOpen={activeToolModal === 'flashcards'} onClose={() => setActiveToolModal(null)} title="Flashcards">
+      <Modal key="flashcards-modal" isOpen={activeToolModal === 'flashcards'} onClose={() => setActiveToolModal(null)} title={t('studyMaterialResponse.flashcardsModalTitle')}>
         {flashcardMaterial && flashcardMaterial.content.cards && flashcardMaterial.content.cards.length > 0 ? (
           <div className="text-center">
             <AnimatePresence mode="wait">
@@ -534,33 +567,17 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
               </div>
             </motion.div>
             </AnimatePresence>
-            <p className="text-sm text-gray-500 mt-2">Click card to flip. Card {currentFlashcardIndex + 1} of {flashcardMaterial.content.cards.length}</p>
+            <p className="text-sm text-gray-500 mt-2">{t('studyMaterialResponse.flashcardFlipPrompt', { current: currentFlashcardIndex + 1, total: flashcardMaterial.content.cards.length })}</p>
             <div className="flex justify-between mt-4">
-              <Button onClick={() => setCurrentFlashcardIndex(prev => Math.max(0, prev - 1))} disabled={currentFlashcardIndex === 0}>Previous</Button>
-              <Button onClick={() => setCurrentFlashcardIndex(prev => Math.min(flashcardMaterial.content.cards.length - 1, prev + 1))} disabled={currentFlashcardIndex === flashcardMaterial.content.cards.length - 1}>Next</Button>
+              <Button onClick={() => setCurrentFlashcardIndex(prev => Math.max(0, prev - 1))} disabled={currentFlashcardIndex === 0}>{t('common.previous')}</Button>
+              <Button onClick={() => setCurrentFlashcardIndex(prev => Math.min(flashcardMaterial.content.cards.length - 1, prev + 1))} disabled={currentFlashcardIndex === flashcardMaterial.content.cards.length - 1}>{t('common.next')}</Button>
             </div>
           </div>
-        ) : <p>No flashcards available for this topic.</p>}
+        ) : <p>{t('studyMaterialResponse.noFlashcards')}</p>}
       </Modal>
 
-      <Modal key="mindmap-modal" isOpen={activeToolModal === 'mindmap'} onClose={() => setActiveToolModal(null)} title="Mind Map">
-        {mindMapMaterial && mindMapMaterial.content.central ? ( // Mock data structure
-          <div className="text-center">
-            <div className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold mb-6 inline-block text-xl shadow-md">{mindMapMaterial.content.central}</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {mindMapMaterial.content.branches?.map((branch: any, index: number) => (
-                <Card key={index} className="p-4 bg-gray-50">
-                  <h4 className="font-semibold text-blue-700 mb-2 text-lg">{branch.title}</h4>
-                  <ul className="space-y-1 list-disc list-inside text-left pl-2">
-                    {branch.subtopics?.map((subtopic: string, i: number) => (
-                      <li key={i} className="text-gray-700 text-sm">{subtopic}</li>
-                    ))}
-                  </ul>
-                </Card>
-              ))}
-            </div>
-          </div>
-        ) : mindMapMaterial && mindMapMaterial.content.id ? ( // API data structure
+      <Modal key="mindmap-modal" isOpen={activeToolModal === 'mindmap'} onClose={() => setActiveToolModal(null)} title={t('studyMaterialResponse.mindMapModalTitle')}>
+        {mindMapMaterial && mindMapMaterial.content.id ? ( 
           <div className="text-center">
             <div className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold mb-6 inline-block text-xl shadow-md">{mindMapMaterial.content.title}</div>
             {mindMapMaterial.content.children && mindMapMaterial.content.children.length > 0 && (
@@ -580,48 +597,48 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
               </div>
             )}
           </div>
-        ) : <p>Mind map not available for this topic.</p>}
+        ) : <p>{t('studyMaterialResponse.noMindMap')}</p>}
       </Modal>
 
-      <Modal key="summary-modal" isOpen={activeToolModal === 'summary'} onClose={() => setActiveToolModal(null)} title="Summary">
+      <Modal key="summary-modal" isOpen={activeToolModal === 'summary'} onClose={() => setActiveToolModal(null)} title={t('studyMaterialResponse.summaryModalTitle')}>
         {summaryMaterial ? (
           <div className="prose prose-sm max-w-none max-h-[60vh] overflow-y-auto p-1">
             <pre className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">{typeof summaryMaterial.content === 'string' ? summaryMaterial.content : JSON.stringify(summaryMaterial.content, null, 2)}</pre>
           </div>
-        ) : <p>Summary not available for this topic.</p>}
+        ) : <p>{t('studyMaterialResponse.noSummary')}</p>}
       </Modal>
       
-      <Modal key="listen-summary-modal" isOpen={activeToolModal === 'listen-summary'} onClose={handleCloseListenModal} title="Listen to Summary">
+      <Modal key="listen-summary-modal" isOpen={activeToolModal === 'listen-summary'} onClose={handleCloseListenModal} title={t('studyMaterialResponse.listenSummaryModalTitle')}>
         {isFetchingAudio ? (
           <div className="text-center py-10">
             <Loader2 size={32} className="mx-auto animate-spin text-blue-500 mb-2" />
-            <p className="text-gray-600">Generating audio...</p>
+            <p className="text-gray-600">{t('studyMaterialResponse.generatingAudio')}</p>
           </div>
         ) : audioPlayerSrc ? (
           <div className="flex flex-col items-center justify-center p-4">
             <audio controls autoPlay src={audioPlayerSrc} className="w-full max-w-md">
-              Your browser does not support the audio element.
+              {t('studyMaterialResponse.audioNotSupported')}
             </audio>
           </div>
         ) : (
-          <p className="text-center text-gray-500 py-10">Audio could not be loaded. Please try again.</p>
+          <p className="text-center text-gray-500 py-10">{t('studyMaterialResponse.audioLoadFailed')}</p>
         )}
       </Modal>
 
-      <Modal key="quiz-modal" isOpen={activeToolModal === 'quiz'} onClose={() => setActiveToolModal(null)} title="Interactive Quiz">
+      <Modal key="quiz-modal" isOpen={activeToolModal === 'quiz'} onClose={() => setActiveToolModal(null)} title={t('studyMaterialResponse.quizModalTitle')}>
         {isGeneratingQuiz ? (
-          <div className="text-center py-10"><Loader2 size={32} className="mx-auto animate-spin text-blue-500 mb-2" /> Generating quiz...</div>
+          <div className="text-center py-10"><Loader2 size={32} className="mx-auto animate-spin text-blue-500 mb-2" /> {t('studyMaterialResponse.generatingQuiz')}</div>
         ) : localQuizData && quizStarted ? (
           quizCompleted ? (
             <div className="text-center space-y-4">
               <Trophy size={48} className="mx-auto text-yellow-500" />
-              <h3 className="text-xl font-bold">Quiz Completed!</h3>
+              <h3 className="text-xl font-bold">{t('studyMaterialResponse.quizCompletedTitle')}</h3>
               <p className="text-2xl font-bold text-green-600">{quizScore}/{localQuizData.questions.reduce((sum, q) => sum + q.points, 0)}</p>
-              <Button onClick={() => handleQuizStart(localQuizData)}>Retake Quiz</Button>
+              <Button onClick={() => handleQuizStart(localQuizData)}>{t('studyMaterialResponse.retakeQuiz')}</Button>
             </div>
           ) : localQuizData.questions[currentQuizQuestion] ? (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">Question {currentQuizQuestion + 1} of {localQuizData.questions.length}</p>
+              <p className="text-sm text-gray-600">{t('studyMaterialResponse.quizQuestionProgress', { current: currentQuizQuestion + 1, total: localQuizData.questions.length })}</p>
               <h4 className="text-lg font-semibold">{localQuizData.questions[currentQuizQuestion].question}</h4>
               {localQuizData.questions[currentQuizQuestion].type === 'mcq' ? (
                 <div className="space-y-2">
@@ -633,11 +650,11 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
                   ))}
                 </div>
               ) : (
-                <textarea value={quizAnswers[localQuizData.questions[currentQuizQuestion].id] || ''} onChange={(e) => handleQuizAnswer(localQuizData.questions[currentQuizQuestion].id, e.target.value)} placeholder="Your answer..." className="w-full h-24 p-2 border rounded-lg" />
+                <textarea value={quizAnswers[localQuizData.questions[currentQuizQuestion].id] || ''} onChange={(e) => handleQuizAnswer(localQuizData.questions[currentQuizQuestion].id, e.target.value)} placeholder={t('studyMaterialResponse.yourAnswerPlaceholder')} className="w-full h-24 p-2 border rounded-lg" />
               )}
               <div className="flex justify-end">
                 <Button onClick={handleNextQuestion} disabled={quizAnswers[localQuizData.questions[currentQuizQuestion].id] === undefined && localQuizData.questions[currentQuizQuestion].type === 'mcq'}>
-                  {currentQuizQuestion === localQuizData.questions.length - 1 ? 'Finish Quiz' : 'Next Question'}
+                  {currentQuizQuestion === localQuizData.questions.length - 1 ? t('studyMaterialResponse.finishQuiz') : t('studyMaterialResponse.nextQuestion')}
                 </Button>
               </div>
             </div>
@@ -645,26 +662,26 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
         ) : (
           <div className="text-center space-y-3">
             <AlertTriangle size={32} className="mx-auto text-orange-500" />
-            <p>Start the quiz to test your knowledge on {data.topic}.</p>
-            <Button onClick={() => openToolModal('quiz')} loading={isGeneratingQuiz}>Start Quiz</Button>
+            <p>{t('studyMaterialResponse.startQuizPrompt', { topic: data.topic })}</p>
+            <Button onClick={() => openToolModal('quiz')} loading={isGeneratingQuiz}>{t('studyMaterialResponse.startQuizButton')}</Button>
           </div>
         )}
       </Modal>
 
-      <Modal key="notes-modal" isOpen={activeToolModal === 'notes'} onClose={() => setActiveToolModal(null)} title={`My Notes for ${data.topic}`}>
+      <Modal key="notes-modal" isOpen={activeToolModal === 'notes'} onClose={() => setActiveToolModal(null)} title={t('studyMaterialResponse.notesModalTitle', { topic: data.topic })}>
         <textarea
           value={currentNoteContent}
           onChange={(e) => setCurrentNoteContent(e.target.value)}
-          placeholder="Type your notes here..."
+          placeholder={t('studyMaterialResponse.notesPlaceholder')}
           className="w-full h-64 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 resize-none"
         />
         <div className="mt-4 flex justify-end">
-          <Button onClick={handleSaveNote}>Save Note</Button>
+          <Button onClick={handleSaveNote}>{t('studyMaterialResponse.saveNoteButton')}</Button>
         </div>
       </Modal>
 
-      <Modal key="share-modal" isOpen={activeToolModal === 'share'} onClose={() => setActiveToolModal(null)} title="Share Study Material">
-        <p className="text-sm text-gray-600 mb-2">Share this study material with others:</p>
+      <Modal key="share-modal" isOpen={activeToolModal === 'share'} onClose={() => setActiveToolModal(null)} title={t('studyMaterialResponse.shareModalTitle')}>
+        <p className="text-sm text-gray-600 mb-2">{t('studyMaterialResponse.shareModalSubtitle')}</p>
         <div className="flex items-center space-x-2 p-3 border border-gray-300 rounded-lg bg-gray-50">
           <input
             type="text"
@@ -673,22 +690,22 @@ export const StudyMaterialResponse: React.FC<StudyMaterialResponseProps> = ({ da
             className="flex-1 bg-transparent outline-none text-sm text-gray-700"
           />
           <Button onClick={handleCopyToClipboard} size="sm" variant="ghost">
-            <Copy size={16} className="mr-1.5" /> Copy
+            <Copy size={16} className="mr-1.5" /> {t('studyMaterialResponse.copyLinkButton')}
           </Button>
         </div>
       </Modal>
 
-      <Modal key="recommendations-modal" isOpen={activeToolModal === 'recommendations'} onClose={() => setActiveToolModal(null)} title="Recommended Batches">
+      <Modal key="recommendations-modal" isOpen={activeToolModal === 'recommendations'} onClose={() => setActiveToolModal(null)} title={t('studyMaterialResponse.recommendationsModalTitle')}>
         <div className="space-y-3">
-            <p className="text-sm text-gray-600">Based on your current study topic "{data.topic}", you might be interested in these PW Batches:</p>
+            <p className="text-sm text-gray-600">{t('studyMaterialResponse.recommendationsSubtitle', { topic: data.topic })}</p>
             <ul className="list-disc list-inside space-y-1 pl-2">
                 {mockBatches.map((batch, index) => (
-                    <li key={index} className="text-gray-700 hover:text-blue-600 cursor-pointer" onClick={() => toast.info(`Explore ${batch}`)}>
+                    <li key={index} className="text-gray-700 hover:text-blue-600 cursor-pointer" onClick={() => toast.info(`${t('studyMaterialResponse.exploreBatchToast', { batchName: batch })}`)}>
                         {batch}
                     </li>
                 ))}
             </ul>
-            <p className="text-xs text-gray-500 mt-2">Note: These are general recommendations. Actual batch suitability may vary.</p>
+            <p className="text-xs text-gray-500 mt-2">{t('studyMaterialResponse.recommendationsNote')}</p>
         </div>
       </Modal>
 

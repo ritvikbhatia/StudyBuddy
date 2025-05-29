@@ -193,15 +193,25 @@ export interface ApiSummary {
 export interface ApiStudyMaterialsData {
   mindmap: ApiMindMapNode;
   quiz: ApiQuizQuestion[];
-  flashcards: ApiFlashcard[];
+  flashcards: ApiFlashcard[] | string; // Can be array or stringified JSON
   summary: ApiSummary;
 }
 
-export interface ApiGenerateStudyMaterialsResponse {
-  success: boolean;
-  message: string;
-  data: ApiStudyMaterialsData;
+export interface ApiGenerateStudyMaterialsDataNested { // Nested data structure
+    success: boolean;
+    message: string;
+    data: ApiStudyMaterialsData;
 }
+
+export interface ApiGenerateStudyMaterialsResponse { // Top-level response
+  status_code: number;
+  data: ApiGenerateStudyMaterialsDataNested; 
+  totalCount?: number;
+  message: string;
+  error_messages?: string[];
+  error: boolean;
+}
+
 
 // Types for the AI Chat API
 export interface ApiAIChatResponseDataInternal {
@@ -250,5 +260,5 @@ export type ActiveToolModalType =
   | 'notes' 
   | 'share' 
   | 'listen-summary' 
-  | 'recommendations' // Added recommendations
+  | 'recommendations'
   | null;
