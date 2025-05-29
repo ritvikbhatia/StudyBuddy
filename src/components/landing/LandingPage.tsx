@@ -187,7 +187,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuthModal }) => 
             {t('landing.ctaSubtitle')}
           </p>
           <div className="flex justify-center"> {/* Centered button */}
-            <Button size="lg" onClick={onOpenAuthModal} className="bg-white text-blue-600 hover:bg-gray-100 shadow-lg transform hover:scale-105 transition-transform duration-300 px-10 py-4 text-lg font-semibold">
+            <Button size="lg" onClick={onOpenAuthModal} className="bg-white text-black hover:bg-gray-100 shadow-lg transform hover:scale-105 transition-transform duration-300 px-10 py-4 text-lg font-semibold">
               {t('landing.ctaButton')} <Zap size={20} className="ml-2" />
             </Button>
           </div>
