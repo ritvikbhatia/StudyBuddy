@@ -194,7 +194,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTabChange }) => {
                   <Icon className={stat.color} size={24} />
                 </div>
                 <div className="text-2xl font-bold text-gray-900 mb-1">
-                  {stat.value.toLocaleString()}{stat.unitKey ? t(stat.unitKey) : ''}
+                  {stat.value.toLocaleString()}{stat.unitKey? " "+ t(stat.unitKey) : ''}
                 </div>
                 <div className="text-gray-600 text-sm">{t(stat.labelKey)}</div>
               </Card>

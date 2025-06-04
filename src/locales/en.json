@@ -123,7 +123,7 @@
   "activity.quizStarted": "Started quiz: {{quizTitle}}",
   "activity.quizCompleted": "Completed quiz: {{quizTitle}}",
 
-  "dashboard.welcomeMessage": "Welcome back, {{name}}! 👋",
+  "dashboard.welcomeMessage": "Welcome, {{name}}! 👋",
   "dashboard.welcomeSubtitle": "Ready to continue your learning journey? Let's make today productive!",
   "dashboard.joinedDate": "Joined {{date}}",
   "dashboard.joinedRecently": "Joined Recently",

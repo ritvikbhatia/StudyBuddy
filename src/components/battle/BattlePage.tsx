@@ -423,7 +423,7 @@ export const BattlePage: React.FC<BattlePageProps> = ({ battleParams }) => {
               </div>
             </div>
             {battleWinner === 'user' && <p className="text-lg text-yellow-600">You earned {battleDifficulty === 'easy' ? 50 : battleDifficulty === 'medium' ? 100 : 150} points!</p>}
-            <Button onClick={() => setBattleState('idle')} size="lg" className="mt-6 self-center">
+            <Button onClick={() => setBattleState('idle')} size="lg" className="mt-6 justify-self-center">
               Play Again <ChevronRight size={20} className="ml-1"/>
             </Button>
           </motion.div>

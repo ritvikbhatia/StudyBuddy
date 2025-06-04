@@ -119,14 +119,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         preferredLanguage: 'en', // Default, will be set later
       };
       setTempUserData(newUserData);
-      setSignupStep('role');
+      setSignupStep('academicLevel');
     } else if (userData && !userData.isProfileComplete) {
       setTempUserData(userData);
       setSelectedUiLanguage(userData.preferredLanguage || 'en'); // Pre-fill if exists
-      setSignupStep('role');
+      setSignupStep('academicLevel');
     } else if (userData && userData.isProfileComplete) {
       login(userData);
-      toast.success(`${t('toast.welcomeBack')}, ${userData.name}!`);
+      toast.success(`${t('toast.welcomeToApp')}, ${userData.name}!`);
       onClose();
       resetModalState();
     }
@@ -195,7 +195,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     login(completeUserData); // This will also set global preferredLanguage in AuthContext
     setGlobalPreferredLanguage(preferredLanguage); // Explicitly set for immediate effect
     
-    toast.success(tempUserData.name === "Ritvik Bhatia" ? t('toast.welcomeToApp') : `${t('toast.welcomeBack')}, ${completeUserData.name}! ${t('toast.profileUpdated')}`);
+    toast.success(t('toast.welcomeToApp'));
     if (tempUserData.name === "Ritvik Bhatia") {
         storageService.addActivity({
             type: 'study',
@@ -313,7 +313,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </Button>
         ))}
       </div>
-      <Button variant="ghost" onClick={() => setSignupStep('role')}>{t('authModal.backToRole')}</Button>
+
     </div>
   );
   

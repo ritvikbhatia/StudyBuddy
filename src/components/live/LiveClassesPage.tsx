@@ -60,7 +60,7 @@ export const LiveClassesPage: React.FC<LiveClassesPageProps> = ({ youtubeVideoId
   const [liveTranscripts, setLiveTranscripts] = useState<ApiTranscriptItem[]>([]);
   const [loadingTranscripts, setLoadingTranscripts] = useState<boolean>(true);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
-  const [selectedTranscriptLanguage, setSelectedTranscriptLanguage] = useState<string>(preferredLanguage || 'english');
+  const [selectedTranscriptLanguage, setSelectedTranscriptLanguage] = useState<string>(preferredLanguage );
 
 
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
@@ -79,7 +79,7 @@ export const LiveClassesPage: React.FC<LiveClassesPageProps> = ({ youtubeVideoId
     }
 
     try {
-      const apiUrl = `https://qbg-backend-stage.penpencil.co/qbg/internal/get-transcripts?stream_id=${liveStreamKey}&language=${selectedTranscriptLanguage}&translate=true`;
+      const apiUrl = selectedTranscriptLanguage=='hindi'?`https://qbg-backend-stage.penpencil.co/qbg/internal/get-transcripts?stream_id=${liveStreamKey}&language=${selectedTranscriptLanguage}`:`https://qbg-backend-stage.penpencil.co/qbg/internal/get-transcripts?stream_id=${liveStreamKey}&language=${selectedTranscriptLanguage}&translate=true`;
       const response = await axios.get<LiveTranscriptionApiResponse>(apiUrl);
       
       if (response.data && response.data.status_code === 200 && 
@@ -90,14 +90,14 @@ export const LiveClassesPage: React.FC<LiveClassesPageProps> = ({ youtubeVideoId
         setTranscriptError(null); 
       } else {
         if (!transcriptError || liveTranscripts.length > 0) { 
-             setTranscriptError(t('liveClasses.transcriptFormatError'));
+            //  setTranscriptError(t(''));
         }
         console.error('API error or malformed transcripts data:', response.data);
       }
     } catch (err) {
       console.error('Network error fetching transcripts:', err);
       if (!transcriptError || liveTranscripts.length > 0) {
-        setTranscriptError(t('liveClasses.transcriptLoadError'));
+        // setTranscriptError(t('liveClasses.transcriptLoadError'));
       }
     } finally {
       if (loadingTranscripts && (liveTranscripts.length === 0 && !transcriptError)) { // Only turn off initial global loading
@@ -140,7 +140,7 @@ export const LiveClassesPage: React.FC<LiveClassesPageProps> = ({ youtubeVideoId
   
   useEffect(() => {
     setLiveChatId(faker.string.uuid()); 
-    setChatMessages([{ id: 'live-initial-ai', type: 'ai', text: t('liveClasses.doubtSolverWelcome'), timestamp: new Date() }]);
+    setChatMessages([{ id: 'live-initial-ai', type: 'ai', text: t('Welcome to the Live Doubt Solver! Ask anything about the ongoing class.'), timestamp: new Date() }]);
 
     const mockLeaderboard: LeaderboardEntry[] = Array.from({ length: 10 }).map((_, i) => ({
       id: faker.string.uuid(),

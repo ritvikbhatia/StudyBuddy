@@ -240,7 +240,7 @@ export const StudyPage: React.FC<StudyPageProps> = ({ onStudyGenerated, initialD
       return;
     }
     if (!selectedInputType) {
-        toast.error(t('toast.selectInputType'));
+        // toast.error(t('toast.selectInputType'));
         return;
     }
 
